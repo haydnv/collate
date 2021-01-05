@@ -5,11 +5,25 @@
 //! [`Collate`] is useful for implementing a B-Tree, or to handle cases where a collator type is
 //! more efficient than calling `Ord::cmp` repeatedly, for example when collating localized strings
 //! using `rust_icu_ucol`.
+//!
+//! Example:
+//! ```
+//! # use collate::*;
+//! let collator = Collator::default();
+//! let collection = [
+//!     [1, 2, 3],
+//!     [2, 3, 4],
+//!     [3, 4, 5],
+//! ];
+//!
+//! assert_eq!(collator.bisect_left(&collection, &[1]), 0);
+//! assert_eq!(collator.bisect_right(&collection, &[1]), 1);
+//! ```
 
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::marker::PhantomData;
-use std::ops::{Bound, Deref};
+use std::ops::Bound;
 
 mod range;
 
@@ -20,7 +34,7 @@ pub trait Collate {
     type Value;
 
     /// Given a collection of slices, return the start and end indices which match the given range.
-    fn bisect<V: Deref<Target = [Self::Value]>, B: Borrow<[Self::Value]>>(
+    fn bisect<V: AsRef<[Self::Value]>, B: Borrow<[Self::Value]>>(
         &self,
         slice: &[V],
         range: &Range<Self::Value, B>,
@@ -33,14 +47,14 @@ pub trait Collate {
     }
 
     /// Given a collection of slices, return the leftmost insert point matching the given key.
-    fn bisect_left<V: Deref<Target = [Self::Value]>>(
+    fn bisect_left<V: AsRef<[Self::Value]>>(
         &self,
         slice: &[V],
         key: &[Self::Value],
     ) -> usize {
         debug_assert!(self.is_sorted(slice));
 
-        if slice.is_empty() || key.is_empty() {
+        if slice.as_ref().is_empty() || key.as_ref().is_empty() {
             0
         } else {
             bisect_left(slice, |at| self.compare_slice(at, key))
@@ -48,12 +62,13 @@ pub trait Collate {
     }
 
     /// Given a collection of slices, return the rightmost insert point matching the given key.
-    fn bisect_right<V: Deref<Target = [Self::Value]>>(
+    fn bisect_right<V: AsRef<[Self::Value]>>(
         &self,
         slice: &[V],
         key: &[Self::Value],
     ) -> usize {
         debug_assert!(self.is_sorted(slice));
+        let slice = slice.as_ref();
 
         if slice.is_empty() {
             0
@@ -111,11 +126,14 @@ pub trait Collate {
     }
 
     /// Returns the relative ordering of the `left` slice with respect to `right`.
-    fn compare_slice<L: Deref<Target = [Self::Value]>, R: Deref<Target = [Self::Value]>>(
+    fn compare_slice<L: AsRef<[Self::Value]>, R: AsRef<[Self::Value]>>(
         &self,
         left: L,
         right: R,
     ) -> Ordering {
+        let left = left.as_ref();
+        let right = right.as_ref();
+
         use Ordering::*;
 
         for i in 0..Ord::min(left.len(), right.len()) {
@@ -135,14 +153,14 @@ pub trait Collate {
     }
 
     /// Returns `true` if the given slice is in sorted order.
-    fn is_sorted<V: Deref<Target = [Self::Value]>>(&self, slice: &[V]) -> bool {
+    fn is_sorted<V: AsRef<[Self::Value]>>(&self, slice: &[V]) -> bool {
         if slice.len() < 2 {
             return true;
         }
 
-        let order = self.compare_slice(slice[1].deref(), slice[0].deref());
+        let order = self.compare_slice(slice[1].as_ref(), slice[0].as_ref());
         for i in 1..slice.len() {
-            let rel = self.compare_slice(slice[i].deref(), slice[i - 1].deref());
+            let rel = self.compare_slice(slice[i].as_ref(), slice[i - 1].as_ref());
             if rel != order && rel != Ordering::Equal {
                 return false;
             }
@@ -166,7 +184,7 @@ impl<T: Ord> Collate for Collator<T> {
     }
 }
 
-fn bisect_left<'a, V: 'a, W: Deref<Target = [V]>, F: Fn(&'a [V]) -> Ordering>(
+fn bisect_left<'a, V: 'a, W: AsRef<[V]>, F: Fn(&'a [V]) -> Ordering>(
     slice: &'a [W],
     cmp: F,
 ) -> usize {
@@ -176,7 +194,7 @@ fn bisect_left<'a, V: 'a, W: Deref<Target = [V]>, F: Fn(&'a [V]) -> Ordering>(
     while start < end {
         let mid = (start + end) / 2;
 
-        if cmp(&slice[mid]) == Ordering::Less {
+        if cmp(slice[mid].as_ref()) == Ordering::Less {
             start = mid + 1;
         } else {
             end = mid;
@@ -186,7 +204,7 @@ fn bisect_left<'a, V: 'a, W: Deref<Target = [V]>, F: Fn(&'a [V]) -> Ordering>(
     start
 }
 
-fn bisect_right<'a, V: 'a, W: Deref<Target = [V]>, F: Fn(&'a [V]) -> Ordering>(
+fn bisect_right<'a, V: 'a, W: AsRef<[V]>, F: Fn(&'a [V]) -> Ordering>(
     slice: &'a [W],
     cmp: F,
 ) -> usize {
@@ -196,7 +214,7 @@ fn bisect_right<'a, V: 'a, W: Deref<Target = [V]>, F: Fn(&'a [V]) -> Ordering>(
     while start < end {
         let mid = (start + end) / 2;
 
-        if cmp(&slice[mid]) == Ordering::Greater {
+        if cmp(slice[mid].as_ref()) == Ordering::Greater {
             end = mid;
         } else {
             start = mid + 1;
@@ -223,6 +241,12 @@ mod tests {
         }
     }
 
+    impl AsRef<[i32]> for Key {
+        fn as_ref(&self) -> &[i32] {
+            self.deref()
+        }
+    }
+
     struct Block {
         keys: Vec<Key>,
     }
@@ -232,6 +256,12 @@ mod tests {
 
         fn deref(&self) -> &[Key] {
             &self.keys
+        }
+    }
+
+    impl AsRef<[Key]> for Block {
+        fn as_ref(&self) -> &[Key] {
+            self.deref()
         }
     }
 
