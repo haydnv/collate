@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::ops::{self, Bound};
 
+/// A range for use with the `Collate` trait.
 pub struct Range<V, B: Borrow<[V]>> {
     prefix: B,
     start: Bound<V>,

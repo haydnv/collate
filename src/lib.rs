@@ -1,3 +1,11 @@
+//! Defines a [`Collate`] trait to standardize collation methods across data types. The provided
+//! [`Collator`] struct can be used to collate a collection of slices of type `T` where `T: Ord`.
+//! Also provides `bisect` (with a [`Range`]), `bisect_left`, and `bisect_right` methods.
+//!
+//! [`Collate`] is useful for implementing a B-Tree, or to handle cases where a collator type is
+//! more efficient than calling `Ord::cmp` repeatedly, for example when collating localized strings
+//! using `rust_icu_ucol`.
+
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::marker::PhantomData;
@@ -7,9 +15,11 @@ mod range;
 
 pub use range::*;
 
+/// Defines methods to collate a collection of slices of type `Value`, given a comparator.
 pub trait Collate {
     type Value;
 
+    /// Given a collection of slices, return the start and end indices which match the given range.
     fn bisect<V: Deref<Target = [Self::Value]>, B: Borrow<[Self::Value]>>(
         &self,
         slice: &[V],
@@ -22,6 +32,7 @@ pub trait Collate {
         (left, right)
     }
 
+    /// Given a collection of slices, return the leftmost insert point matching the given key.
     fn bisect_left<V: Deref<Target = [Self::Value]>>(
         &self,
         slice: &[V],
@@ -36,6 +47,7 @@ pub trait Collate {
         }
     }
 
+    /// Given a collection of slices, return the rightmost insert point matching the given key.
     fn bisect_right<V: Deref<Target = [Self::Value]>>(
         &self,
         slice: &[V],
@@ -52,8 +64,10 @@ pub trait Collate {
         }
     }
 
+    /// Define the relative ordering of `Self::Value`.
     fn compare(&self, left: &Self::Value, right: &Self::Value) -> Ordering;
 
+    /// Returns the ordering of the given key relative to the given range.
     fn compare_range<B: Borrow<[Self::Value]>>(
         &self,
         key: &[Self::Value],
@@ -96,6 +110,7 @@ pub trait Collate {
         Equal
     }
 
+    /// Returns the relative ordering of the `left` slice with respect to `right`.
     fn compare_slice<L: Deref<Target = [Self::Value]>, R: Deref<Target = [Self::Value]>>(
         &self,
         left: L,
@@ -119,6 +134,7 @@ pub trait Collate {
         }
     }
 
+    /// Returns `true` if the given slice is in sorted order.
     fn is_sorted<V: Deref<Target = [Self::Value]>>(&self, slice: &[V]) -> bool {
         if slice.len() < 2 {
             return true;
@@ -136,6 +152,7 @@ pub trait Collate {
     }
 }
 
+/// A generic collator for any type `T: Ord`.
 #[derive(Default)]
 pub struct Collator<T> {
     phantom: PhantomData<T>,
