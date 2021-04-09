@@ -47,11 +47,7 @@ pub trait Collate {
     }
 
     /// Given a collection of slices, return the leftmost insert point matching the given key.
-    fn bisect_left<V: AsRef<[Self::Value]>>(
-        &self,
-        slice: &[V],
-        key: &[Self::Value],
-    ) -> usize {
+    fn bisect_left<V: AsRef<[Self::Value]>>(&self, slice: &[V], key: &[Self::Value]) -> usize {
         debug_assert!(self.is_sorted(slice));
 
         if slice.as_ref().is_empty() || key.as_ref().is_empty() {
@@ -62,11 +58,7 @@ pub trait Collate {
     }
 
     /// Given a collection of slices, return the rightmost insert point matching the given key.
-    fn bisect_right<V: AsRef<[Self::Value]>>(
-        &self,
-        slice: &[V],
-        key: &[Self::Value],
-    ) -> usize {
+    fn bisect_right<V: AsRef<[Self::Value]>>(&self, slice: &[V], key: &[Self::Value]) -> usize {
         debug_assert!(self.is_sorted(slice));
         let slice = slice.as_ref();
 
@@ -171,7 +163,7 @@ pub trait Collate {
 }
 
 /// A generic collator for any type `T: Ord`.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Collator<T> {
     phantom: PhantomData<T>,
 }
