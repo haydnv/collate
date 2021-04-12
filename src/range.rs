@@ -20,6 +20,10 @@ impl<V> Default for Range<V, Vec<V>> {
 }
 
 impl<V, B: Borrow<[V]>> Range<V, B> {
+    pub fn into_inner(self) -> (B, Bound<V>, Bound<V>) {
+        (self.prefix, self.start, self.end)
+    }
+
     pub fn len(&self) -> usize {
         self.prefix().len() + 1
     }
