@@ -83,9 +83,11 @@ pub trait Collate {
         use Bound::*;
         use Ordering::*;
 
-        let prefix_rel = self.compare_slice(key, range.prefix());
-        if prefix_rel != Equal || key.len() < range.len() {
-            return prefix_rel;
+        if !range.prefix().is_empty() {
+            let prefix_rel = self.compare_slice(key, range.prefix());
+            if prefix_rel != Equal || key.len() < range.len() {
+                return prefix_rel;
+            }
         }
 
         let target = &key[range.prefix().len()];
@@ -337,7 +339,7 @@ mod tests {
         assert!(collator.is_sorted(&block));
 
         let range = Range::from(([], 0..1));
-        assert_eq!(collator.bisect(&block, &range), (0, 0));
+        assert_eq!(collator.bisect(&block, &range), (0, 1));
 
         let range = Range::from(([1], 0..1));
         assert_eq!(collator.bisect(&block, &range), (2, 4));
@@ -350,5 +352,7 @@ mod tests {
 
         let range = Range::from(([1, 0], ..1));
         assert_eq!(collator.bisect(&block, &range), (2, 3));
+
+        assert_eq!(collator.bisect(&block, &Range::default()), (0, block.len()));
     }
 }
