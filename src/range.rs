@@ -20,6 +20,24 @@ impl<V> Default for Range<V, Vec<V>> {
 }
 
 impl<V, B: Borrow<[V]>> Range<V, B> {
+    pub fn new(prefix: B, range: ops::Range<V>) -> Self {
+        let ops::Range { start, end } = range;
+
+        Self {
+            prefix,
+            start: Bound::Included(start),
+            end: Bound::Excluded(end),
+        }
+    }
+
+    pub fn with_prefix(prefix: B) -> Self {
+        Self {
+            prefix,
+            start: Bound::Unbounded,
+            end: Bound::Unbounded,
+        }
+    }
+
     pub fn into_inner(self) -> (B, Bound<V>, Bound<V>) {
         (self.prefix, self.start, self.end)
     }
