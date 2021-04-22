@@ -355,4 +355,27 @@ mod tests {
 
         assert_eq!(collator.bisect(&block, &Range::default()), (0, block.len()));
     }
+
+    #[test]
+    fn test_range_contains() {
+        let outer = Range::with_prefix(vec![1]);
+        let inner = Range::with_prefix(vec![1, 2]);
+        assert!(outer.contains(&inner, &Collator::default()));
+        assert!(!inner.contains(&outer, &Collator::default()));
+
+        let outer = Range::with_prefix(vec![1, 2]);
+        let inner = Range::new(vec![1, 2], 1..3);
+        assert!(outer.contains(&inner, &Collator::default()));
+        assert!(!inner.contains(&outer, &Collator::default()));
+
+        let outer = Range::with_prefix(vec![1, 2, 2]);
+        let inner = Range::new(vec![1, 2], 1..2);
+        assert!(!outer.contains(&inner, &Collator::default()));
+        assert!(!inner.contains(&outer, &Collator::default()));
+
+        let outer = Range::new(vec![1, 2], 3..4);
+        let inner = Range::with_prefix(vec![1, 2, 3]);
+        assert!(outer.contains(&inner, &Collator::default()));
+        assert!(!inner.contains(&outer, &Collator::default()));
+    }
 }
