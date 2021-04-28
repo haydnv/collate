@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::fmt;
 use std::ops::{self, Bound};
 
 use super::Collate;
@@ -122,7 +123,11 @@ impl<V, B: Borrow<[V]>> Range<V, B> {
     }
 
     pub fn len(&self) -> usize {
-        self.prefix().len() + 1
+        let len = self.prefix().len();
+        match (&self.start, &self.end) {
+            (Bound::Unbounded, Bound::Unbounded) => len,
+            _ => len + 1,
+        }
     }
 
     pub fn prefix(&'_ self) -> &'_ [V] {
@@ -181,5 +186,33 @@ impl<V, B> From<(B, ops::Bound<V>, ops::Bound<V>)> for Range<V, B> {
     fn from(tuple: (B, ops::Bound<V>, ops::Bound<V>)) -> Self {
         let (prefix, start, end) = tuple;
         Self { prefix, start, end }
+    }
+}
+
+impl<V: fmt::Debug, B: Borrow<[V]>> fmt::Debug for Range<V, B> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let suffix = match (&self.start, &self.end) {
+            (Bound::Excluded(l), Bound::Unbounded) => format!("[{:?},)", l),
+            (Bound::Excluded(l), Bound::Excluded(r)) => format!("[{:?},{:?}]", l, r),
+            (Bound::Excluded(l), Bound::Included(r)) => format!("[{:?},{:?})", l, r),
+            (Bound::Included(l), Bound::Unbounded) => format!("({:?},)", l),
+            (Bound::Included(l), Bound::Excluded(r)) => format!("({:?},{:?}]", l, r),
+            (Bound::Included(l), Bound::Included(r)) => format!("({:?},{:?})", l, r),
+            (Bound::Unbounded, Bound::Unbounded) => format!("()"),
+            (Bound::Unbounded, Bound::Excluded(r)) => format!("(,{:?}]", r),
+            (Bound::Unbounded, Bound::Included(r)) => format!("(,{:?})", r),
+        };
+
+        write!(
+            f,
+            "Range {} with prefix {}",
+            suffix,
+            self.prefix
+                .borrow()
+                .iter()
+                .map(|v| format!("{:?}", v))
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
     }
 }
