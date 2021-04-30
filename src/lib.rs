@@ -90,6 +90,10 @@ pub trait Collate {
             }
         }
 
+        if !range.has_bounds() {
+            return Equal;
+        }
+
         let target = &key[range.prefix().len()];
 
         match range.start() {

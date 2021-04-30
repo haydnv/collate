@@ -12,6 +12,16 @@ pub struct Range<V, B> {
     end: Bound<V>,
 }
 
+impl<V, B> Range<V, B> {
+    /// Returns `false` if both the start and end bounds of this `Range` are `Unbounded`.
+    pub fn has_bounds(&self) -> bool {
+        match (&self.start, &self.end) {
+            (Bound::Unbounded, Bound::Unbounded) => false,
+            _ => true,
+        }
+    }
+}
+
 impl<V: Eq, B: Borrow<[V]>> Range<V, B> {
     pub fn contains<C: Collate<Value = V>>(&self, other: &Self, collator: &C) -> bool {
         if other.prefix.borrow().len() < self.prefix.borrow().len() {
