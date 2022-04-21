@@ -186,6 +186,7 @@ impl<T: Ord> Collate for Collator<T> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct FloatCollator<T> {
     phantom: PhantomData<T>,
 }

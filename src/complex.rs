@@ -4,6 +4,7 @@ use num_complex::Complex;
 
 use super::{Collate, FloatCollator};
 
+#[derive(Copy, Clone)]
 pub struct ComplexCollator<T> {
     float: FloatCollator<T>,
 }
