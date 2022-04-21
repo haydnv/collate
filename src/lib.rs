@@ -25,6 +25,8 @@ use std::cmp::Ordering;
 use std::marker::PhantomData;
 use std::ops::Bound;
 
+#[cfg(feature = "complex")]
+mod complex;
 mod range;
 
 pub use range::*;
@@ -181,6 +183,33 @@ impl<T: Ord> Collate for Collator<T> {
         left.cmp(right)
     }
 }
+
+macro_rules! collate_float {
+    ($t:ty) => {
+        impl Collate for $t {
+            type Value = $t;
+
+            fn compare(&self, left: &Self::Value, right: &Self::Value) -> Ordering {
+                if let Some(order) = left.partial_cmp(right) {
+                    order
+                } else {
+                    if left == right {
+                        Ordering::Equal
+                    } else if left == &<$t>::NEG_INFINITY || right == &<$t>::INFINITY {
+                        Ordering::Less
+                    } else if left == &<$t>::INFINITY || right == &<$t>::NEG_INFINITY {
+                        Ordering::Greater
+                    } else {
+                        panic!("no collation defined between {} and {}", left, right)
+                    }
+                }
+            }
+        }
+    };
+}
+
+collate_float!(f32);
+collate_float!(f64);
 
 fn bisect_left<'a, V: 'a, W: AsRef<[V]>, F: Fn(&'a [V]) -> Ordering>(
     slice: &'a [W],
