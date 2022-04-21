@@ -29,6 +29,8 @@ use std::ops::Bound;
 mod complex;
 mod range;
 
+#[cfg(feature = "complex")]
+pub use complex::*;
 pub use range::*;
 
 /// Defines methods to collate a collection of slices of type `Value`, given a comparator.
@@ -184,9 +186,13 @@ impl<T: Ord> Collate for Collator<T> {
     }
 }
 
+pub struct FloatCollator<T> {
+    phantom: PhantomData<T>,
+}
+
 macro_rules! collate_float {
     ($t:ty) => {
-        impl Collate for $t {
+        impl Collate for FloatCollator<$t> {
             type Value = $t;
 
             fn compare(&self, left: &Self::Value, right: &Self::Value) -> Ordering {
@@ -203,6 +209,12 @@ macro_rules! collate_float {
                         panic!("no collation defined between {} and {}", left, right)
                     }
                 }
+            }
+        }
+
+        impl Default for FloatCollator<$t> {
+            fn default() -> Self {
+                Self { phantom: PhantomData }
             }
         }
     };
