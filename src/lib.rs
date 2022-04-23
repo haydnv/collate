@@ -186,43 +186,74 @@ impl<T: Ord> Collate for Collator<T> {
     }
 }
 
+pub fn compare_f32(left: &f32, right: &f32) -> Ordering {
+    if let Some(order) = left.partial_cmp(right) {
+        order
+    } else {
+        if left == right {
+            Ordering::Equal
+        } else if left == &f32::NEG_INFINITY || right == &f32::INFINITY {
+            Ordering::Less
+        } else if left == &f32::INFINITY || right == &f32::NEG_INFINITY {
+            Ordering::Greater
+        } else {
+            panic!("no collation defined between {} and {}", left, right)
+        }
+    }
+}
+
+pub fn compare_f64(left: &f64, right: &f64) -> Ordering {
+    if let Some(order) = left.partial_cmp(right) {
+        order
+    } else {
+        if left == right {
+            Ordering::Equal
+        } else if left == &f64::NEG_INFINITY || right == &f64::INFINITY {
+            Ordering::Less
+        } else if left == &f64::INFINITY || right == &f64::NEG_INFINITY {
+            Ordering::Greater
+        } else {
+            panic!("no collation defined between {} and {}", left, right)
+        }
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct FloatCollator<T> {
     phantom: PhantomData<T>,
 }
 
-macro_rules! collate_float {
-    ($t:ty) => {
-        impl Collate for FloatCollator<$t> {
-            type Value = $t;
+impl Collate for FloatCollator<f32> {
+    type Value = f32;
 
-            fn compare(&self, left: &Self::Value, right: &Self::Value) -> Ordering {
-                if let Some(order) = left.partial_cmp(right) {
-                    order
-                } else {
-                    if left == right {
-                        Ordering::Equal
-                    } else if left == &<$t>::NEG_INFINITY || right == &<$t>::INFINITY {
-                        Ordering::Less
-                    } else if left == &<$t>::INFINITY || right == &<$t>::NEG_INFINITY {
-                        Ordering::Greater
-                    } else {
-                        panic!("no collation defined between {} and {}", left, right)
-                    }
-                }
-            }
-        }
-
-        impl Default for FloatCollator<$t> {
-            fn default() -> Self {
-                Self { phantom: PhantomData }
-            }
-        }
-    };
+    fn compare(&self, left: &Self::Value, right: &Self::Value) -> Ordering {
+        compare_f32(left, right)
+    }
 }
 
-collate_float!(f32);
-collate_float!(f64);
+impl Default for FloatCollator<f32> {
+    fn default() -> Self {
+        Self {
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl Collate for FloatCollator<f64> {
+    type Value = f64;
+
+    fn compare(&self, left: &Self::Value, right: &Self::Value) -> Ordering {
+        compare_f64(left, right)
+    }
+}
+
+impl Default for FloatCollator<f64> {
+    fn default() -> Self {
+        Self {
+            phantom: PhantomData,
+        }
+    }
+}
 
 fn bisect_left<'a, V: 'a, W: AsRef<[V]>, F: Fn(&'a [V]) -> Ordering>(
     slice: &'a [W],
