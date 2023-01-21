@@ -4,7 +4,11 @@
 //!
 //! [`Collate`] is useful for implementing a B-Tree, or to handle cases where a collator type is
 //! more efficient than calling `Ord::cmp` repeatedly, for example when collating localized strings
-//! using `rust_icu_ucol`.
+//! using `rust_icu_ucol`. It's also useful to collate types like `f32` and `f64`
+//! which do not support `Ord`. A [`FloatCollator`] is provided for this purpose.
+//!
+//! Enable the "complex" feature to provide support for collating `Complex` numbers provided by
+//! the `num_complex` crate.
 //!
 //! Example:
 //! ```
@@ -162,9 +166,10 @@ pub trait Collate {
 
         let order = self.compare_slice(slice[1].as_ref(), slice[0].as_ref());
         for i in 1..slice.len() {
-            let rel = self.compare_slice(slice[i].as_ref(), slice[i - 1].as_ref());
-            if rel != order && rel != Ordering::Equal {
-                return false;
+            match self.compare_slice(slice[i].as_ref(), slice[i - 1].as_ref()) {
+                Ordering::Equal => {}
+                rel if rel == order => {}
+                _rel => return false,
             }
         }
 
@@ -186,6 +191,7 @@ impl<T: Ord> Collate for Collator<T> {
     }
 }
 
+/// Compare the `left` and `right `f32` values for collation.
 pub fn compare_f32(left: &f32, right: &f32) -> Ordering {
     if let Some(order) = left.partial_cmp(right) {
         order
@@ -202,6 +208,7 @@ pub fn compare_f32(left: &f32, right: &f32) -> Ordering {
     }
 }
 
+/// Compare the `left` and `right `f32` values for collation.
 pub fn compare_f64(left: &f64, right: &f64) -> Ordering {
     if let Some(order) = left.partial_cmp(right) {
         order
@@ -218,6 +225,7 @@ pub fn compare_f64(left: &f64, right: &f64) -> Ordering {
     }
 }
 
+/// Implements [`Collate`] for `f32` and `f64` values.
 #[derive(Copy, Clone)]
 pub struct FloatCollator<T> {
     phantom: PhantomData<T>,

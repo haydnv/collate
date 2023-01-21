@@ -1,8 +1,8 @@
 [package]
 name = "collate"
-version = "0.2.3"
-authors = ["haydn@tinychain.net"]
-edition = "2018"
+version = "0.2.4"
+authors = ["code@tinychain.net"]
+edition = "2021"
 license = "Apache-2.0"
 description = "Traits and a data structure to support collation and bisection"
 repository = "http://github.com/haydnv/collate"

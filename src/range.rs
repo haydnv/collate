@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
+use std::cmp::Ordering::{Greater, Less};
 use std::fmt;
-use std::ops::{self, Bound};
+use std::ops::{Bound, Range as Bounds, RangeFrom as BoundsFrom, RangeTo as BoundsTo};
 
 use super::Collate;
 
@@ -23,6 +24,7 @@ impl<V, B> Range<V, B> {
 }
 
 impl<V: Eq, B: Borrow<[V]>> Range<V, B> {
+    /// Return `true` if the `other` [`Range`] lies entirely within this one.
     pub fn contains<C: Collate<Value = V>>(&self, other: &Self, collator: &C) -> bool {
         if other.prefix.borrow().len() < self.prefix.borrow().len() {
             return false;
@@ -32,7 +34,6 @@ impl<V: Eq, B: Borrow<[V]>> Range<V, B> {
             return false;
         }
 
-        use std::cmp::Ordering::*;
         if other.prefix.borrow().len() == self.prefix.borrow().len() {
             match &self.start {
                 Bound::Unbounded => {}
@@ -110,8 +111,9 @@ impl<V> Default for Range<V, Vec<V>> {
 }
 
 impl<V, B: Borrow<[V]>> Range<V, B> {
-    pub fn new(prefix: B, range: ops::Range<V>) -> Self {
-        let ops::Range { start, end } = range;
+    /// Construct a new [`Range`] with the given `prefix`.
+    pub fn new(prefix: B, range: Bounds<V>) -> Self {
+        let Bounds { start, end } = range;
 
         Self {
             prefix,
@@ -120,6 +122,7 @@ impl<V, B: Borrow<[V]>> Range<V, B> {
         }
     }
 
+    /// Construct a new [`Range`] with only the given `prefix`.
     pub fn with_prefix(prefix: B) -> Self {
         Self {
             prefix,
@@ -128,10 +131,12 @@ impl<V, B: Borrow<[V]>> Range<V, B> {
         }
     }
 
+    /// Deconstruct this [`Range`] into its prefix and its start and end [`Bound`]s.
     pub fn into_inner(self) -> (B, Bound<V>, Bound<V>) {
         (self.prefix, self.start, self.end)
     }
 
+    /// Return the length of this [`Range`].
     pub fn len(&self) -> usize {
         let len = self.prefix().len();
         match (&self.start, &self.end) {
@@ -140,23 +145,26 @@ impl<V, B: Borrow<[V]>> Range<V, B> {
         }
     }
 
-    pub fn prefix(&'_ self) -> &'_ [V] {
+    /// Borrow the prefix of this [`Range`].
+    pub fn prefix(&self) -> &[V] {
         self.prefix.borrow()
     }
 
-    pub fn start(&'_ self) -> &'_ Bound<V> {
+    /// Borrow the starting [`Bound`] of the last item in this range.
+    pub fn start(&self) -> &Bound<V> {
         &self.start
     }
 
-    pub fn end(&'_ self) -> &'_ Bound<V> {
+    /// Borrow the ending [`Bound`] of the last item in this range.
+    pub fn end(&self) -> &Bound<V> {
         &self.end
     }
 }
 
-impl<V, B> From<(B, ops::Range<V>)> for Range<V, B> {
-    fn from(tuple: (B, ops::Range<V>)) -> Self {
+impl<V, B> From<(B, Bounds<V>)> for Range<V, B> {
+    fn from(tuple: (B, Bounds<V>)) -> Self {
         let (prefix, suffix) = tuple;
-        let ops::Range { start, end } = suffix;
+        let Bounds { start, end } = suffix;
 
         Self {
             prefix,
@@ -166,10 +174,10 @@ impl<V, B> From<(B, ops::Range<V>)> for Range<V, B> {
     }
 }
 
-impl<V, B> From<(B, ops::RangeFrom<V>)> for Range<V, B> {
-    fn from(tuple: (B, ops::RangeFrom<V>)) -> Self {
+impl<V, B> From<(B, BoundsFrom<V>)> for Range<V, B> {
+    fn from(tuple: (B, BoundsFrom<V>)) -> Self {
         let (prefix, suffix) = tuple;
-        let ops::RangeFrom { start } = suffix;
+        let BoundsFrom { start } = suffix;
 
         Self {
             prefix,
@@ -179,10 +187,10 @@ impl<V, B> From<(B, ops::RangeFrom<V>)> for Range<V, B> {
     }
 }
 
-impl<V, B> From<(B, ops::RangeTo<V>)> for Range<V, B> {
-    fn from(tuple: (B, ops::RangeTo<V>)) -> Self {
+impl<V, B> From<(B, BoundsTo<V>)> for Range<V, B> {
+    fn from(tuple: (B, BoundsTo<V>)) -> Self {
         let (prefix, suffix) = tuple;
-        let ops::RangeTo { end } = suffix;
+        let BoundsTo { end } = suffix;
 
         Self {
             prefix,
@@ -192,8 +200,8 @@ impl<V, B> From<(B, ops::RangeTo<V>)> for Range<V, B> {
     }
 }
 
-impl<V, B> From<(B, ops::Bound<V>, ops::Bound<V>)> for Range<V, B> {
-    fn from(tuple: (B, ops::Bound<V>, ops::Bound<V>)) -> Self {
+impl<V, B> From<(B, Bound<V>, Bound<V>)> for Range<V, B> {
+    fn from(tuple: (B, Bound<V>, Bound<V>)) -> Self {
         let (prefix, start, end) = tuple;
         Self { prefix, start, end }
     }
