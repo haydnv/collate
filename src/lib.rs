@@ -8,7 +8,9 @@
 
 use std::cmp::Ordering;
 use std::marker::PhantomData;
-use std::ops::{Bound, RangeBounds};
+use std::ops::{
+    Bound, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
+};
 
 #[cfg(feature = "complex")]
 pub use complex::*;
@@ -20,74 +22,38 @@ pub trait Collate: Sized + Eq {
     /// Return the collation of the `left` value relative to the `right` value.
     fn cmp(&self, left: &Self::Value, right: &Self::Value) -> Ordering;
 
-    /// Return `true` if the given `range` contains the given `value`.
-    fn contains<R>(&self, range: &R, value: &Self::Value) -> bool
-    where
-        R: RangeBounds<Self::Value>,
-    {
-        let start = match range.start_bound() {
-            Bound::Unbounded => Ordering::Less,
-            Bound::Included(start) => self.cmp(start, value),
-            Bound::Excluded(start) => match self.cmp(start, value) {
-                Ordering::Less | Ordering::Equal => Ordering::Less,
-                Ordering::Greater => Ordering::Greater,
-            }
-        };
-
-        let end = match range.end_bound() {
-            Bound::Unbounded => Ordering::Greater,
-            Bound::Included(end) => self.cmp(end, value),
-            Bound::Excluded(end) => match self.cmp(end, value) {
-                Ordering::Less => Ordering::Less,
-                Ordering::Greater | Ordering::Equal => Ordering::Greater,
-            }
-        };
-
-        match (start, end) {
-            (Ordering::Equal, _) => true,
-            (_, Ordering::Equal) => true,
-            (Ordering::Less, Ordering::Greater) => true,
-            (Ordering::Less, Ordering::Less) => false,
-            (Ordering::Greater, Ordering::Greater) => false,
-            (Ordering::Greater, Ordering::Less) => panic!("bad range"),
-        }
-    }
-
-    /// Return the [`Overlap`] of the `left` range w/r/t the `right` range.
-    fn overlaps<L, R>(&self, left: &L, right: &R) -> Overlap
-    where
-        L: RangeBounds<Self::Value>,
-        R: RangeBounds<Self::Value>,
-    {
-        let start = cmp_bound_start(self, left.start_bound(), right.start_bound());
-        let end = cmp_bound_end(self, left.end_bound(), right.end_bound());
-
-        match (start, end) {
-            (Ordering::Equal, Ordering::Equal) => Overlap::Equal,
-
-            (Ordering::Greater, Ordering::Less) => Overlap::Narrow,
-            (Ordering::Greater, Ordering::Equal) => Overlap::Narrow,
-            (Ordering::Equal, Ordering::Less) => Overlap::Narrow,
-
-            (Ordering::Less, Ordering::Greater) => Overlap::Wide,
-            (Ordering::Less, Ordering::Equal) => Overlap::WideLess,
-            (Ordering::Equal, Ordering::Greater) => Overlap::WideGreater,
-
-            (Ordering::Less, _) => {
-                match cmp_bound_start(self, left.end_bound(), right.start_bound()) {
-                    Ordering::Less => Overlap::Less,
-                    Ordering::Greater | Ordering::Equal => Overlap::WideLess,
-                }
-            }
-
-            (_, Ordering::Greater) => {
-                match cmp_bound_end(self, left.start_bound(), right.end_bound()) {
-                    Ordering::Less | Ordering::Equal => Overlap::WideGreater,
-                    Ordering::Greater => Overlap::Greater,
-                }
-            }
-        }
-    }
+    // /// Return `true` if the given `range` contains the given `value`.
+    // fn contains<R>(&self, range: &R, value: &Self::Value) -> bool
+    // where
+    //     R: RangeBounds<Self::Value>,
+    // {
+    //     let start = match range.start_bound() {
+    //         Bound::Unbounded => Ordering::Less,
+    //         Bound::Included(start) => self.cmp(start, value),
+    //         Bound::Excluded(start) => match self.cmp(start, value) {
+    //             Ordering::Less | Ordering::Equal => Ordering::Less,
+    //             Ordering::Greater => Ordering::Greater,
+    //         }
+    //     };
+    //
+    //     let end = match range.end_bound() {
+    //         Bound::Unbounded => Ordering::Greater,
+    //         Bound::Included(end) => self.cmp(end, value),
+    //         Bound::Excluded(end) => match self.cmp(end, value) {
+    //             Ordering::Less => Ordering::Less,
+    //             Ordering::Greater | Ordering::Equal => Ordering::Greater,
+    //         }
+    //     };
+    //
+    //     match (start, end) {
+    //         (Ordering::Equal, _) => true,
+    //         (_, Ordering::Equal) => true,
+    //         (Ordering::Less, Ordering::Greater) => true,
+    //         (Ordering::Less, Ordering::Less) => false,
+    //         (Ordering::Greater, Ordering::Greater) => false,
+    //         (Ordering::Greater, Ordering::Less) => panic!("bad range"),
+    //     }
+    // }
 }
 
 /// A generic collator for any type `T: Ord`.
@@ -165,59 +131,158 @@ pub trait Overlaps<T, C: Collate> {
     ///
     /// Examples:
     /// ```
-    /// use collate::{Collate, Collator, Overlap};
+    /// use collate::{Collate, Collator, Overlap, Overlaps};
     /// let collator = Collator::default();
-    /// assert_eq!(collator.overlaps(&(..1), &(2..5)), Overlap::Less);
-    /// assert_eq!(collator.overlaps(&(0..1), &(0..1)), Overlap::Equal);
-    /// assert_eq!(collator.overlaps(&(2..3), &(..2)), Overlap::Greater);
-    /// assert_eq!(collator.overlaps(&(3..5), &(1..7)), Overlap::Narrow);
-    /// assert_eq!(collator.overlaps(&(1..), &(3..5)), Overlap::Wide);
-    /// assert_eq!(collator.overlaps(&(1..4), &(3..)), Overlap::WideLess);
-    /// assert_eq!(collator.overlaps(&(3..5), &(1..4)), Overlap::WideGreater);
+    /// assert_eq!((..1).overlaps(&(2..5), &collator), Overlap::Less);
+    /// assert_eq!((0..1).overlaps(&(0..1), &collator), Overlap::Equal);
+    /// assert_eq!((1..4).overlaps(&(4..5), &collator), Overlap::Less);
+    /// assert_eq!((4..5).overlaps(&(1..4), &collator), Overlap::Greater);
+    /// assert_eq!((3..5).overlaps(&(1..7), &collator), Overlap::Narrow);
+    /// assert_eq!((1..).overlaps(&(3..5), &collator), Overlap::Wide);
+    /// assert_eq!((1..4).overlaps(&(3..), &collator), Overlap::WideLess);
+    /// assert_eq!((3..5).overlaps(&(..4), &collator), Overlap::WideGreater);
     /// ```
     fn overlaps(&self, other: &T, collator: &C) -> Overlap;
 }
 
+macro_rules! overlaps_range {
+    ($l:ty, $r:ty, $t:ty) => {
+        impl Overlaps<$r, Collator<$t>> for $l {
+            fn overlaps(&self, other: &$r, collator: &Collator<$t>) -> Overlap {
+                overlaps(collator, self, other)
+            }
+        }
+    };
+}
+
+macro_rules! range_overlaps {
+    ($t:ty) => {
+        overlaps_range!(Range<$t>, Range<$t>, $t);
+        overlaps_range!(Range<$t>, RangeFull, $t);
+        overlaps_range!(Range<$t>, RangeFrom<$t>, $t);
+        overlaps_range!(Range<$t>, RangeInclusive<$t>, $t);
+        overlaps_range!(Range<$t>, RangeTo<$t>, $t);
+        overlaps_range!(Range<$t>, RangeToInclusive<$t>, $t);
+
+        overlaps_range!(RangeFull, Range<$t>, $t);
+        overlaps_range!(RangeFull, RangeFull, $t);
+        overlaps_range!(RangeFull, RangeFrom<$t>, $t);
+        overlaps_range!(RangeFull, RangeInclusive<$t>, $t);
+        overlaps_range!(RangeFull, RangeTo<$t>, $t);
+        overlaps_range!(RangeFull, RangeToInclusive<$t>, $t);
+
+        overlaps_range!(RangeFrom<$t>, Range<$t>, $t);
+        overlaps_range!(RangeFrom<$t>, RangeFull, $t);
+        overlaps_range!(RangeFrom<$t>, RangeFrom<$t>, $t);
+        overlaps_range!(RangeFrom<$t>, RangeInclusive<$t>, $t);
+        overlaps_range!(RangeFrom<$t>, RangeTo<$t>, $t);
+        overlaps_range!(RangeFrom<$t>, RangeToInclusive<$t>, $t);
+
+        overlaps_range!(RangeTo<$t>, Range<$t>, $t);
+        overlaps_range!(RangeTo<$t>, RangeFull, $t);
+        overlaps_range!(RangeTo<$t>, RangeFrom<$t>, $t);
+        overlaps_range!(RangeTo<$t>, RangeInclusive<$t>, $t);
+        overlaps_range!(RangeTo<$t>, RangeTo<$t>, $t);
+        overlaps_range!(RangeTo<$t>, RangeToInclusive<$t>, $t);
+    };
+}
+
+range_overlaps!(bool);
+range_overlaps!(i8);
+range_overlaps!(i16);
+range_overlaps!(i32);
+range_overlaps!(i64);
+range_overlaps!(u8);
+range_overlaps!(u16);
+range_overlaps!(u32);
+range_overlaps!(u64);
+range_overlaps!(usize);
+
 #[inline]
-fn cmp_bound_start<C>(collator: &C, left: Bound<&C::Value>, right: Bound<&C::Value>) -> Ordering
+fn cmp_bound<C>(
+    collator: &C,
+    left: Bound<&C::Value>,
+    right: Bound<&C::Value>,
+    l_ex: Ordering,
+    r_ex: Ordering,
+) -> Ordering
 where
     C: Collate,
 {
     match (left, right) {
         (Bound::Unbounded, Bound::Unbounded) => Ordering::Equal,
-        (Bound::Unbounded, _) => Ordering::Less,
-        (_, Bound::Unbounded) => Ordering::Greater,
+        (_, Bound::Unbounded) => l_ex,
+        (Bound::Unbounded, _) => r_ex,
         (Bound::Included(this), Bound::Included(that)) => collator.cmp(this, that),
         (Bound::Excluded(this), Bound::Excluded(that)) => collator.cmp(this, that),
-        (Bound::Included(this), Bound::Excluded(that)) => match collator.cmp(this, that) {
-            Ordering::Less | Ordering::Equal => Ordering::Less,
-            Ordering::Greater => Ordering::Greater,
-        },
         (Bound::Excluded(this), Bound::Included(that)) => match collator.cmp(this, that) {
-            Ordering::Less => Ordering::Less,
-            Ordering::Greater | Ordering::Equal => Ordering::Greater,
+            Ordering::Equal => l_ex,
+            ordering => ordering,
+        },
+        (Bound::Included(this), Bound::Excluded(that)) => match collator.cmp(this, that) {
+            Ordering::Equal => r_ex,
+            ordering => ordering,
         },
     }
 }
 
-#[inline]
-fn cmp_bound_end<C>(collator: &C, left: Bound<&C::Value>, right: Bound<&C::Value>) -> Ordering
+/// Return the [`Overlap`] of the `left` range w/r/t the `right` range.
+fn overlaps<C, L, R>(collator: &C, left: &L, right: &R) -> Overlap
 where
     C: Collate,
+    L: RangeBounds<C::Value>,
+    R: RangeBounds<C::Value>,
 {
-    match (left, right) {
-        (Bound::Unbounded, Bound::Unbounded) => Ordering::Equal,
-        (Bound::Unbounded, _) => Ordering::Greater,
-        (_, Bound::Unbounded) => Ordering::Less,
-        (Bound::Included(this), Bound::Included(that)) => collator.cmp(this, that),
-        (Bound::Excluded(this), Bound::Excluded(that)) => collator.cmp(this, that),
-        (Bound::Included(this), Bound::Excluded(that)) => match collator.cmp(this, that) {
-            Ordering::Less => Ordering::Less,
-            Ordering::Greater | Ordering::Equal => Ordering::Greater,
-        },
-        (Bound::Excluded(this), Bound::Included(that)) => match collator.cmp(this, that) {
-            Ordering::Greater => Ordering::Greater,
-            Ordering::Less | Ordering::Equal => Ordering::Less,
-        },
+    let start = cmp_bound(
+        collator,
+        left.start_bound(),
+        right.start_bound(),
+        Ordering::Greater,
+        Ordering::Less,
+    );
+    let end = cmp_bound(
+        collator,
+        left.end_bound(),
+        right.end_bound(),
+        Ordering::Less,
+        Ordering::Greater,
+    );
+
+    match (start, end) {
+        (Ordering::Equal, Ordering::Equal) => Overlap::Equal,
+
+        (Ordering::Greater, Ordering::Less) => Overlap::Narrow,
+        (Ordering::Greater, Ordering::Equal) => Overlap::Narrow,
+        (Ordering::Equal, Ordering::Less) => Overlap::Narrow,
+
+        (Ordering::Less, Ordering::Greater) => Overlap::Wide,
+        (Ordering::Less, Ordering::Equal) => Overlap::WideLess,
+        (Ordering::Equal, Ordering::Greater) => Overlap::WideGreater,
+
+        (Ordering::Less, _) => {
+            match cmp_bound(
+                collator,
+                left.end_bound(),
+                right.start_bound(),
+                Ordering::Less,
+                Ordering::Less,
+            ) {
+                Ordering::Less => Overlap::Less,
+                Ordering::Greater | Ordering::Equal => Overlap::WideLess,
+            }
+        }
+
+        (_, Ordering::Greater) => {
+            match cmp_bound(
+                collator,
+                left.start_bound(),
+                right.end_bound(),
+                Ordering::Greater,
+                Ordering::Greater,
+            ) {
+                Ordering::Less | Ordering::Equal => Overlap::WideGreater,
+                Ordering::Greater => Overlap::Greater,
+            }
+        }
     }
 }
