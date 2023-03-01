@@ -125,13 +125,19 @@ pub trait Overlaps<T, C: Collate> {
     fn overlaps(&self, other: &T, collator: &C) -> Overlap;
 }
 
-impl<T: Overlaps<T, C>, C: Collate<Value = T>> Overlaps<T, C> for Arc<T> {
+impl<T: Overlaps<T, C>, C: Collate> Overlaps<T, C> for Arc<T>
+where
+    T: Overlaps<T, C>,
+{
     fn overlaps(&self, other: &T, collator: &C) -> Overlap {
         (&**self).overlaps(&other, collator)
     }
 }
 
-impl<T: Overlaps<T, C>, C: Collate<Value = T>> Overlaps<Arc<T>, C> for Arc<T> {
+impl<T: Overlaps<T, C>, C: Collate> Overlaps<Arc<T>, C> for Arc<T>
+where
+    T: Overlaps<T, C>,
+{
     fn overlaps(&self, other: &Arc<T>, collator: &C) -> Overlap {
         (&**self).overlaps(&**other, collator)
     }
