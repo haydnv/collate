@@ -1,5 +1,5 @@
 //! Defines a [`Collate`] trait to standardize collation methods across data types. The provided
-//! [`Collator`] struct can be used to collate a collection of slices of type `T` where `T: Ord`.
+//! [`Collator`] struct can be used to collate a collection of items of type `T` where `T: Ord`.
 //!
 //! [`Collate`] is useful for implementing a B-Tree, or to handle cases where a collator type is
 //! more efficient than calling `Ord::cmp` repeatedly, for example when collating localized strings
@@ -14,12 +14,12 @@ use std::sync::Arc;
 #[cfg(feature = "complex")]
 pub use complex::*;
 
-/// Defines methods to collate a collection of slices of type `Value`, given a comparator.
-pub trait Collate {
+/// A collator for type `Value`.
+pub trait Collate: Eq {
     type Value;
 
-    /// Define the relative ordering of `Self::Value`.
-    fn compare(&self, left: &Self::Value, right: &Self::Value) -> Ordering;
+    /// Return the collation of the `left` value relative to the `right` value.
+    fn cmp(&self, left: &Self::Value, right: &Self::Value) -> Ordering;
 }
 
 /// A generic collator for any type `T: Ord`.
@@ -28,10 +28,20 @@ pub struct Collator<T> {
     phantom: PhantomData<T>,
 }
 
+impl<T> PartialEq for Collator<T> {
+    fn eq(&self, _other: &Self) -> bool {
+        // this collator has no configuration state, and therefore must be identical
+        // to any other collator of the same type
+        true
+    }
+}
+
+impl<T> Eq for Collator<T> {}
+
 impl<T: Ord> Collate for Collator<T> {
     type Value = T;
 
-    fn compare(&self, left: &Self::Value, right: &Self::Value) -> Ordering {
+    fn cmp(&self, left: &Self::Value, right: &Self::Value) -> Ordering {
         left.cmp(right)
     }
 }
@@ -62,12 +72,27 @@ pub enum Overlap {
     WideGreater,
 }
 
+impl Overlap {
+    /// Reverses the [`Overlap`] (e.g. `Less` becomes `Greater`, `Narrow` becomes `Wide`, etc).
+    pub fn reverse(self) -> Self {
+        match self {
+            Self::Less => Self::Greater,
+            Self::Greater => Self::Less,
+            Self::Equal => Self::Equal,
+            Self::Narrow => Self::Wide,
+            Self::Wide => Self::Narrow,
+            Self::WideLess => Self::WideGreater,
+            Self::WideGreater => Self::WideLess,
+        }
+    }
+}
+
 /// Range comparison methods
-pub trait Overlaps<T> {
+pub trait Overlaps<T, C: Collate> {
     /// Check whether `other` lies entirely within `self`.
     #[inline]
-    fn contains(&self, other: &T) -> bool {
-        match self.overlaps(other) {
+    fn contains(&self, other: &T, collator: &C) -> bool {
+        match self.overlaps(other, collator) {
             Overlap::Wide | Overlap::Equal => true,
             _ => false,
         }
@@ -75,8 +100,8 @@ pub trait Overlaps<T> {
 
     /// Check whether `other` lies at least partially within `self`.
     #[inline]
-    fn contains_partial(&self, other: &T) -> bool {
-        match self.overlaps(other) {
+    fn contains_partial(&self, other: &T, collator: &C) -> bool {
+        match self.overlaps(other, collator) {
             Overlap::Narrow | Overlap::Equal => true,
             Overlap::WideLess | Overlap::Wide | Overlap::WideGreater => true,
             _ => false,
@@ -87,51 +112,59 @@ pub trait Overlaps<T> {
     ///
     /// Examples:
     /// ```
-    /// use collate::{Overlap, Overlaps};
-    /// assert_eq!((0..1).overlaps(&(2..5)), Overlap::Less);
-    /// assert_eq!((0..1).overlaps(&(0..1)), Overlap::Equal);
-    /// assert_eq!((2..3).overlaps(&(0..2)), Overlap::Greater);
-    /// assert_eq!((3..5).overlaps(&(1..7)), Overlap::Narrow);
-    /// assert_eq!((1..7).overlaps(&(3..5)), Overlap::Wide);
-    /// assert_eq!((1..4).overlaps(&(3..5)), Overlap::WideLess);
-    /// assert_eq!((3..5).overlaps(&(1..4)), Overlap::WideGreater);
+    /// use collate::{Collator, Overlap, Overlaps};
+    /// let collator = Collator::default();
+    /// assert_eq!((0..1).overlaps(&(2..5), &collator), Overlap::Less);
+    /// assert_eq!((0..1).overlaps(&(0..1), &collator), Overlap::Equal);
+    /// assert_eq!((2..3).overlaps(&(0..2), &collator), Overlap::Greater);
+    /// assert_eq!((3..5).overlaps(&(1..7), &collator), Overlap::Narrow);
+    /// assert_eq!((1..7).overlaps(&(3..5), &collator), Overlap::Wide);
+    /// assert_eq!((1..4).overlaps(&(3..5), &collator), Overlap::WideLess);
+    /// assert_eq!((3..5).overlaps(&(1..4), &collator), Overlap::WideGreater);
     /// ```
-    fn overlaps(&self, other: &T) -> Overlap;
+    fn overlaps(&self, other: &T, collator: &C) -> Overlap;
 }
 
-impl<T: Overlaps<T>> Overlaps<T> for Arc<T> {
-    fn overlaps(&self, other: &T) -> Overlap {
-        (&**self).overlaps(&other)
+impl<T: Overlaps<T, C>, C: Collate<Value = T>> Overlaps<T, C> for Arc<T> {
+    fn overlaps(&self, other: &T, collator: &C) -> Overlap {
+        (&**self).overlaps(&other, collator)
     }
 }
 
-impl<T: Overlaps<T>> Overlaps<Arc<T>> for Arc<T> {
-    fn overlaps(&self, other: &Arc<T>) -> Overlap {
-        (&**self).overlaps(&**other)
+impl<T: Overlaps<T, C>, C: Collate<Value = T>> Overlaps<Arc<T>, C> for Arc<T> {
+    fn overlaps(&self, other: &Arc<T>, collator: &C) -> Overlap {
+        (&**self).overlaps(&**other, collator)
     }
 }
 
-impl<Idx: PartialOrd<Idx>> Overlaps<Range<Idx>> for Range<Idx> {
-    fn overlaps(&self, other: &Self) -> Overlap {
-        assert!(self.end >= self.start);
-        assert!(other.end >= other.start);
+impl<Idx, C: Collate<Value = Idx>> Overlaps<Range<Idx>, C> for Range<Idx> {
+    fn overlaps(&self, other: &Self, collator: &C) -> Overlap {
+        debug_assert_ne!(collator.cmp(&self.end, &self.start), Ordering::Less);
+        debug_assert_ne!(collator.cmp(&other.end, &other.start), Ordering::Less);
 
-        if self.start >= other.end {
-            Overlap::Greater
-        } else if self.end <= other.start {
-            Overlap::Less
-        } else if self.start == other.start && self.end == other.end {
-            Overlap::Equal
-        } else if self.start <= other.start && self.end >= other.end {
-            Overlap::Wide
-        } else if self.start >= other.start && self.end <= other.end {
-            Overlap::Narrow
-        } else if self.end > other.end {
-            Overlap::WideGreater
-        } else if self.start < other.start {
-            Overlap::WideLess
-        } else {
-            unreachable!()
+        let start = collator.cmp(&self.start, &other.start);
+        let end = collator.cmp(&self.end, &other.end);
+
+        match (start, end) {
+            (Ordering::Equal, Ordering::Equal) => Overlap::Equal,
+
+            (Ordering::Greater, Ordering::Less) => Overlap::Narrow,
+            (Ordering::Equal, Ordering::Less) => Overlap::Narrow,
+            (Ordering::Greater, Ordering::Equal) => Overlap::Narrow,
+
+            (Ordering::Less, Ordering::Greater) => Overlap::Wide,
+            (Ordering::Less, Ordering::Equal) => Overlap::Wide,
+            (Ordering::Equal, Ordering::Greater) => Overlap::Wide,
+
+            (Ordering::Greater, Ordering::Greater) => match collator.cmp(&self.start, &other.end) {
+                Ordering::Less => Overlap::WideGreater,
+                Ordering::Greater | Ordering::Equal => Overlap::Greater,
+            },
+
+            (Ordering::Less, Ordering::Less) => match collator.cmp(&self.end, &other.start) {
+                Ordering::Greater => Overlap::WideLess,
+                Ordering::Less | Ordering::Equal => Overlap::Less,
+            },
         }
     }
 }
