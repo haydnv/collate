@@ -145,6 +145,76 @@ pub trait Overlaps<T, C: Collate> {
     fn overlaps(&self, other: &T, collator: &C) -> Overlap;
 }
 
+impl Overlaps<(Bound<usize>, Bound<usize>), Collator<usize>> for (Bound<usize>, Bound<usize>) {
+    fn overlaps(
+        &self,
+        other: &(Bound<usize>, Bound<usize>),
+        collator: &Collator<usize>,
+    ) -> Overlap {
+        overlaps(collator, self, other)
+    }
+}
+
+impl<'a, V, C> Overlaps<(&'a Bound<V>, &'a Bound<V>), C> for (&'a Bound<V>, &'a Bound<V>)
+    where C: Collate<Value = V>
+{
+    fn overlaps(&self, other: &(&'a Bound<V>, &'a Bound<V>), collator: &C) -> Overlap {
+        let start = cmp_bound(
+            collator,
+            self.0.as_ref(),
+            other.0.as_ref(),
+            Ordering::Greater,
+            Ordering::Less,
+        );
+
+        let end = cmp_bound(
+            collator,
+            self.1.as_ref(),
+            other.1.as_ref(),
+            Ordering::Less,
+            Ordering::Greater,
+        );
+
+        match (start, end) {
+            (Ordering::Equal, Ordering::Equal) => Overlap::Equal,
+
+            (Ordering::Greater, Ordering::Less) => Overlap::Narrow,
+            (Ordering::Greater, Ordering::Equal) => Overlap::Narrow,
+            (Ordering::Equal, Ordering::Less) => Overlap::Narrow,
+
+            (Ordering::Less, Ordering::Greater) => Overlap::Wide,
+            (Ordering::Less, Ordering::Equal) => Overlap::WideLess,
+            (Ordering::Equal, Ordering::Greater) => Overlap::WideGreater,
+
+            (Ordering::Less, _) => {
+                match cmp_bound(
+                    collator,
+                    self.1.as_ref(),
+                    other.0.as_ref(),
+                    Ordering::Less,
+                    Ordering::Less,
+                ) {
+                    Ordering::Less => Overlap::Less,
+                    Ordering::Greater | Ordering::Equal => Overlap::WideLess,
+                }
+            }
+
+            (_, Ordering::Greater) => {
+                match cmp_bound(
+                    collator,
+                    self.0.as_ref(),
+                    other.1.as_ref(),
+                    Ordering::Greater,
+                    Ordering::Greater,
+                ) {
+                    Ordering::Less | Ordering::Equal => Overlap::WideGreater,
+                    Ordering::Greater => Overlap::Greater,
+                }
+            }
+        }
+    }
+}
+
 macro_rules! overlaps_range {
     ($l:ty, $r:ty, $t:ty) => {
         impl Overlaps<$r, Collator<$t>> for $l {
@@ -199,10 +269,10 @@ range_overlaps!(u64);
 range_overlaps!(usize);
 
 #[inline]
-fn cmp_bound<C>(
-    collator: &C,
-    left: Bound<&C::Value>,
-    right: Bound<&C::Value>,
+fn cmp_bound<'a, C>(
+    collator: &'a C,
+    left: Bound<&'a C::Value>,
+    right: Bound<&'a C::Value>,
     l_ex: Ordering,
     r_ex: Ordering,
 ) -> Ordering
@@ -226,7 +296,6 @@ where
     }
 }
 
-/// Return the [`Overlap`] of the `left` range w/r/t the `right` range.
 fn overlaps<C, L, R>(collator: &C, left: &L, right: &R) -> Overlap
 where
     C: Collate,
@@ -240,6 +309,7 @@ where
         Ordering::Greater,
         Ordering::Less,
     );
+
     let end = cmp_bound(
         collator,
         left.end_bound(),
