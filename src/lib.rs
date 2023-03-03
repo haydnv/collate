@@ -112,16 +112,6 @@ pub trait OverlapsRange<T, C: Collate> {
     fn overlaps(&self, other: &T, collator: &C) -> Overlap;
 }
 
-impl OverlapsRange<(Bound<usize>, Bound<usize>), Collator<usize>> for (Bound<usize>, Bound<usize>) {
-    fn overlaps(
-        &self,
-        other: &(Bound<usize>, Bound<usize>),
-        collator: &Collator<usize>,
-    ) -> Overlap {
-        overlaps(collator, self, other)
-    }
-}
-
 type BorrowBounds<'a, V> = (&'a Bound<V>, &'a Bound<V>);
 
 impl<'a, C> OverlapsRange<BorrowBounds<'a, C::Value>, C> for BorrowBounds<'a, C::Value>
@@ -195,6 +185,7 @@ macro_rules! overlaps_range {
     };
 }
 
+overlaps_range!(Range<C::Value>, (Bound<C::Value>, Bound<C::Value>));
 overlaps_range!(Range<C::Value>, Range<C::Value>);
 overlaps_range!(Range<C::Value>, RangeFull);
 overlaps_range!(Range<C::Value>, RangeFrom<C::Value>);
@@ -202,6 +193,7 @@ overlaps_range!(Range<C::Value>, RangeInclusive<C::Value>);
 overlaps_range!(Range<C::Value>, RangeTo<C::Value>);
 overlaps_range!(Range<C::Value>, RangeToInclusive<C::Value>);
 
+overlaps_range!(RangeFull, (Bound<C::Value>, Bound<C::Value>));
 overlaps_range!(RangeFull, Range<C::Value>);
 overlaps_range!(RangeFull, RangeFull);
 overlaps_range!(RangeFull, RangeFrom<C::Value>);
@@ -209,6 +201,7 @@ overlaps_range!(RangeFull, RangeInclusive<C::Value>);
 overlaps_range!(RangeFull, RangeTo<C::Value>);
 overlaps_range!(RangeFull, RangeToInclusive<C::Value>);
 
+overlaps_range!(RangeFrom<C::Value>, (Bound<C::Value>, Bound<C::Value>));
 overlaps_range!(RangeFrom<C::Value>, Range<C::Value>);
 overlaps_range!(RangeFrom<C::Value>, RangeFull);
 overlaps_range!(RangeFrom<C::Value>, RangeFrom<C::Value>);
@@ -216,12 +209,27 @@ overlaps_range!(RangeFrom<C::Value>, RangeInclusive<C::Value>);
 overlaps_range!(RangeFrom<C::Value>, RangeTo<C::Value>);
 overlaps_range!(RangeFrom<C::Value>, RangeToInclusive<C::Value>);
 
+overlaps_range!(RangeTo<C::Value>, (Bound<C::Value>, Bound<C::Value>));
 overlaps_range!(RangeTo<C::Value>, Range<C::Value>);
 overlaps_range!(RangeTo<C::Value>, RangeFull);
 overlaps_range!(RangeTo<C::Value>, RangeFrom<C::Value>);
 overlaps_range!(RangeTo<C::Value>, RangeInclusive<C::Value>);
 overlaps_range!(RangeTo<C::Value>, RangeTo<C::Value>);
 overlaps_range!(RangeTo<C::Value>, RangeToInclusive<C::Value>);
+
+overlaps_range!(
+    (Bound<C::Value>, Bound<C::Value>),
+    (Bound<C::Value>, Bound<C::Value>)
+);
+overlaps_range!((Bound<C::Value>, Bound<C::Value>), Range<C::Value>);
+overlaps_range!((Bound<C::Value>, Bound<C::Value>), RangeFull);
+overlaps_range!((Bound<C::Value>, Bound<C::Value>), RangeFrom<C::Value>);
+overlaps_range!((Bound<C::Value>, Bound<C::Value>), RangeInclusive<C::Value>);
+overlaps_range!((Bound<C::Value>, Bound<C::Value>), RangeTo<C::Value>);
+overlaps_range!(
+    (Bound<C::Value>, Bound<C::Value>),
+    RangeToInclusive<C::Value>
+);
 
 /// Range-value comparison methods
 pub trait OverlapsValue<V, C: Collate> {
@@ -248,6 +256,7 @@ macro_rules! overlaps_value {
     };
 }
 
+overlaps_value!((Bound<C::Value>, Bound<C::Value>));
 overlaps_value!(Range<C::Value>);
 overlaps_value!(RangeFull);
 overlaps_value!(RangeFrom<C::Value>);
