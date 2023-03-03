@@ -21,39 +21,6 @@ pub trait Collate: Sized + Eq {
 
     /// Return the collation of the `left` value relative to the `right` value.
     fn cmp(&self, left: &Self::Value, right: &Self::Value) -> Ordering;
-
-    // /// Return `true` if the given `range` contains the given `value`.
-    // fn contains<R>(&self, range: &R, value: &Self::Value) -> bool
-    // where
-    //     R: RangeBounds<Self::Value>,
-    // {
-    //     let start = match range.start_bound() {
-    //         Bound::Unbounded => Ordering::Less,
-    //         Bound::Included(start) => self.cmp(start, value),
-    //         Bound::Excluded(start) => match self.cmp(start, value) {
-    //             Ordering::Less | Ordering::Equal => Ordering::Less,
-    //             Ordering::Greater => Ordering::Greater,
-    //         }
-    //     };
-    //
-    //     let end = match range.end_bound() {
-    //         Bound::Unbounded => Ordering::Greater,
-    //         Bound::Included(end) => self.cmp(end, value),
-    //         Bound::Excluded(end) => match self.cmp(end, value) {
-    //             Ordering::Less => Ordering::Less,
-    //             Ordering::Greater | Ordering::Equal => Ordering::Greater,
-    //         }
-    //     };
-    //
-    //     match (start, end) {
-    //         (Ordering::Equal, _) => true,
-    //         (_, Ordering::Equal) => true,
-    //         (Ordering::Less, Ordering::Greater) => true,
-    //         (Ordering::Less, Ordering::Less) => false,
-    //         (Ordering::Greater, Ordering::Greater) => false,
-    //         (Ordering::Greater, Ordering::Less) => panic!("bad range"),
-    //     }
-    // }
 }
 
 /// A generic collator for any type `T: Ord`.
@@ -106,8 +73,8 @@ pub enum Overlap {
     WideGreater,
 }
 
-/// Range comparison methods
-pub trait Overlaps<T, C: Collate> {
+/// Range-range comparison methods
+pub trait OverlapsRange<T, C: Collate> {
     /// Check whether `other` lies entirely within `self`.
     #[inline]
     fn contains(&self, other: &T, collator: &C) -> bool {
@@ -131,7 +98,7 @@ pub trait Overlaps<T, C: Collate> {
     ///
     /// Examples:
     /// ```
-    /// use collate::{Collate, Collator, Overlap, Overlaps};
+    /// use collate::{Collate, Collator, Overlap, OverlapsRange};
     /// let collator = Collator::default();
     /// assert_eq!((..1).overlaps(&(2..5), &collator), Overlap::Less);
     /// assert_eq!((0..1).overlaps(&(0..1), &collator), Overlap::Equal);
@@ -145,7 +112,7 @@ pub trait Overlaps<T, C: Collate> {
     fn overlaps(&self, other: &T, collator: &C) -> Overlap;
 }
 
-impl Overlaps<(Bound<usize>, Bound<usize>), Collator<usize>> for (Bound<usize>, Bound<usize>) {
+impl OverlapsRange<(Bound<usize>, Bound<usize>), Collator<usize>> for (Bound<usize>, Bound<usize>) {
     fn overlaps(
         &self,
         other: &(Bound<usize>, Bound<usize>),
@@ -155,10 +122,13 @@ impl Overlaps<(Bound<usize>, Bound<usize>), Collator<usize>> for (Bound<usize>, 
     }
 }
 
-impl<'a, V, C> Overlaps<(&'a Bound<V>, &'a Bound<V>), C> for (&'a Bound<V>, &'a Bound<V>)
-    where C: Collate<Value = V>
+type BorrowBounds<'a, V> = (&'a Bound<V>, &'a Bound<V>);
+
+impl<'a, C> OverlapsRange<BorrowBounds<'a, C::Value>, C> for BorrowBounds<'a, C::Value>
+where
+    C: Collate,
 {
-    fn overlaps(&self, other: &(&'a Bound<V>, &'a Bound<V>), collator: &C) -> Overlap {
+    fn overlaps(&self, other: &BorrowBounds<'a, C::Value>, collator: &C) -> Overlap {
         let start = cmp_bound(
             collator,
             self.0.as_ref(),
@@ -216,57 +186,74 @@ impl<'a, V, C> Overlaps<(&'a Bound<V>, &'a Bound<V>), C> for (&'a Bound<V>, &'a 
 }
 
 macro_rules! overlaps_range {
-    ($l:ty, $r:ty, $t:ty) => {
-        impl Overlaps<$r, Collator<$t>> for $l {
-            fn overlaps(&self, other: &$r, collator: &Collator<$t>) -> Overlap {
+    ($l:ty, $r:ty) => {
+        impl<C: Collate> OverlapsRange<$r, C> for $l {
+            fn overlaps(&self, other: &$r, collator: &C) -> Overlap {
                 overlaps(collator, self, other)
             }
         }
     };
 }
 
-macro_rules! range_overlaps {
+overlaps_range!(Range<C::Value>, Range<C::Value>);
+overlaps_range!(Range<C::Value>, RangeFull);
+overlaps_range!(Range<C::Value>, RangeFrom<C::Value>);
+overlaps_range!(Range<C::Value>, RangeInclusive<C::Value>);
+overlaps_range!(Range<C::Value>, RangeTo<C::Value>);
+overlaps_range!(Range<C::Value>, RangeToInclusive<C::Value>);
+
+overlaps_range!(RangeFull, Range<C::Value>);
+overlaps_range!(RangeFull, RangeFull);
+overlaps_range!(RangeFull, RangeFrom<C::Value>);
+overlaps_range!(RangeFull, RangeInclusive<C::Value>);
+overlaps_range!(RangeFull, RangeTo<C::Value>);
+overlaps_range!(RangeFull, RangeToInclusive<C::Value>);
+
+overlaps_range!(RangeFrom<C::Value>, Range<C::Value>);
+overlaps_range!(RangeFrom<C::Value>, RangeFull);
+overlaps_range!(RangeFrom<C::Value>, RangeFrom<C::Value>);
+overlaps_range!(RangeFrom<C::Value>, RangeInclusive<C::Value>);
+overlaps_range!(RangeFrom<C::Value>, RangeTo<C::Value>);
+overlaps_range!(RangeFrom<C::Value>, RangeToInclusive<C::Value>);
+
+overlaps_range!(RangeTo<C::Value>, Range<C::Value>);
+overlaps_range!(RangeTo<C::Value>, RangeFull);
+overlaps_range!(RangeTo<C::Value>, RangeFrom<C::Value>);
+overlaps_range!(RangeTo<C::Value>, RangeInclusive<C::Value>);
+overlaps_range!(RangeTo<C::Value>, RangeTo<C::Value>);
+overlaps_range!(RangeTo<C::Value>, RangeToInclusive<C::Value>);
+
+/// Range-value comparison methods
+pub trait OverlapsValue<V, C: Collate> {
+    fn contains_value(&self, value: &V, collator: &C) -> bool {
+        match self.overlaps_value(value, collator) {
+            Overlap::Less | Overlap::Greater => false,
+            _ => true,
+        }
+    }
+
+    fn overlaps_value(&self, value: &V, collator: &C) -> Overlap;
+}
+
+macro_rules! overlaps_value {
     ($t:ty) => {
-        overlaps_range!(Range<$t>, Range<$t>, $t);
-        overlaps_range!(Range<$t>, RangeFull, $t);
-        overlaps_range!(Range<$t>, RangeFrom<$t>, $t);
-        overlaps_range!(Range<$t>, RangeInclusive<$t>, $t);
-        overlaps_range!(Range<$t>, RangeTo<$t>, $t);
-        overlaps_range!(Range<$t>, RangeToInclusive<$t>, $t);
-
-        overlaps_range!(RangeFull, Range<$t>, $t);
-        overlaps_range!(RangeFull, RangeFull, $t);
-        overlaps_range!(RangeFull, RangeFrom<$t>, $t);
-        overlaps_range!(RangeFull, RangeInclusive<$t>, $t);
-        overlaps_range!(RangeFull, RangeTo<$t>, $t);
-        overlaps_range!(RangeFull, RangeToInclusive<$t>, $t);
-
-        overlaps_range!(RangeFrom<$t>, Range<$t>, $t);
-        overlaps_range!(RangeFrom<$t>, RangeFull, $t);
-        overlaps_range!(RangeFrom<$t>, RangeFrom<$t>, $t);
-        overlaps_range!(RangeFrom<$t>, RangeInclusive<$t>, $t);
-        overlaps_range!(RangeFrom<$t>, RangeTo<$t>, $t);
-        overlaps_range!(RangeFrom<$t>, RangeToInclusive<$t>, $t);
-
-        overlaps_range!(RangeTo<$t>, Range<$t>, $t);
-        overlaps_range!(RangeTo<$t>, RangeFull, $t);
-        overlaps_range!(RangeTo<$t>, RangeFrom<$t>, $t);
-        overlaps_range!(RangeTo<$t>, RangeInclusive<$t>, $t);
-        overlaps_range!(RangeTo<$t>, RangeTo<$t>, $t);
-        overlaps_range!(RangeTo<$t>, RangeToInclusive<$t>, $t);
+        impl<C> OverlapsValue<C::Value, C> for $t
+        where
+            C: Collate,
+        {
+            fn overlaps_value(&self, value: &C::Value, collator: &C) -> Overlap {
+                overlaps_value(self, value, collator)
+            }
+        }
     };
 }
 
-range_overlaps!(bool);
-range_overlaps!(i8);
-range_overlaps!(i16);
-range_overlaps!(i32);
-range_overlaps!(i64);
-range_overlaps!(u8);
-range_overlaps!(u16);
-range_overlaps!(u32);
-range_overlaps!(u64);
-range_overlaps!(usize);
+overlaps_value!(Range<C::Value>);
+overlaps_value!(RangeFull);
+overlaps_value!(RangeFrom<C::Value>);
+overlaps_value!(RangeInclusive<C::Value>);
+overlaps_value!(RangeTo<C::Value>);
+overlaps_value!(RangeToInclusive<C::Value>);
 
 #[inline]
 fn cmp_bound<'a, C>(
@@ -354,5 +341,47 @@ where
                 Ordering::Greater => Overlap::Greater,
             }
         }
+    }
+}
+
+#[inline]
+fn overlaps_value<C: Collate, R: RangeBounds<C::Value>>(
+    range: &R,
+    value: &C::Value,
+    collator: &C,
+) -> Overlap {
+    let start = match range.start_bound() {
+        Bound::Unbounded => Ordering::Less,
+        Bound::Included(start) => collator.cmp(start, value),
+        Bound::Excluded(start) => match collator.cmp(start, value) {
+            Ordering::Less => Ordering::Less,
+            Ordering::Greater | Ordering::Equal => Ordering::Greater,
+        },
+    };
+
+    let end = match range.end_bound() {
+        Bound::Unbounded => Ordering::Greater,
+        Bound::Included(end) => collator.cmp(end, value),
+        Bound::Excluded(end) => match collator.cmp(end, value) {
+            Ordering::Greater => Ordering::Greater,
+            Ordering::Less | Ordering::Equal => Ordering::Less,
+        },
+    };
+
+    match (start, end) {
+        (start, Ordering::Less) => {
+            debug_assert_eq!(start, Ordering::Less);
+            Overlap::Less
+        }
+        (Ordering::Greater, end) => {
+            debug_assert_eq!(end, Ordering::Greater);
+            Overlap::Greater
+        }
+
+        (Ordering::Equal, Ordering::Equal) => Overlap::Equal,
+
+        (Ordering::Equal, Ordering::Greater) => Overlap::WideGreater,
+        (Ordering::Less, Ordering::Greater) => Overlap::Wide,
+        (Ordering::Less, Ordering::Equal) => Overlap::WideLess,
     }
 }
