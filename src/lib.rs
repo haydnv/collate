@@ -24,10 +24,18 @@ pub trait Collate: Sized + Eq {
 }
 
 /// A generic collator for any type `T: Ord`.
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct Collator<T> {
     phantom: PhantomData<T>,
 }
+
+impl<T> Clone for Collator<T> {
+    fn clone(&self) -> Self {
+        Self { phantom: PhantomData }
+    }
+}
+
+impl<T> Copy for Collator<T> {}
 
 impl<T> PartialEq for Collator<T> {
     fn eq(&self, _other: &Self) -> bool {
