@@ -73,6 +73,44 @@ pub enum Overlap {
     WideGreater,
 }
 
+impl Overlap {
+    /// Return the narrowest [`Overlap`] which contains both `self` and `other`.
+    /// Examples:
+    /// ```
+    /// use collate::Overlap;
+    /// assert_eq!(Overlap::Narrow.then(Overlap::Less), Overlap::WideLess);
+    /// assert_eq!(Overlap::WideLess.then(Overlap::WideGreater), Overlap::Wide);
+    /// assert_eq!(Overlap::Less.then(Overlap::Greater), Overlap::Wide);
+    /// assert_eq!(Overlap::Less.then(Overlap::Less), Overlap::Less);
+    /// ```
+    pub fn then(self, other: Self) -> Self {
+        match self {
+            Self::Wide => Self::Wide,
+            Self::Narrow => match other {
+                Self::Less | Self::WideLess => Self::WideLess,
+                Self::Narrow | Self::Equal => self,
+                Self::Wide => Self::Wide,
+                Self::Greater | Self::WideGreater => Self::WideGreater,
+            }
+            Self::Equal => match other {
+                Self::Less | Self::WideLess => Self::WideLess,
+                Self::Equal | Self::Narrow | Self::Wide => other,
+                Self::Greater | Self::WideGreater => Self::WideGreater,
+            }
+            Self::Less | Self::WideLess => match other {
+                Self::Less => self,
+                Self::WideLess | Self::Narrow | Self::Equal => Self::WideLess,
+                Self::Wide | Self::WideGreater | Self::Greater => Self::Wide,
+            }
+            Self::Greater | Self::WideGreater => match other {
+                Self::Greater => self,
+                Self::WideGreater | Self::Narrow | Self::Equal => Self::WideGreater,
+                Self::Wide | Self::WideLess | Self::Less => Self::Wide,
+            }
+        }
+    }
+}
+
 /// Range-range comparison methods
 pub trait OverlapsRange<T, C: Collate> {
     /// Check whether `other` lies entirely within `self`.
