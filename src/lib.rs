@@ -24,14 +24,23 @@ pub trait Collate: Sized + Eq {
 }
 
 /// A generic collator for any type `T: Ord`.
-#[derive(Default)]
 pub struct Collator<T> {
     phantom: PhantomData<T>,
 }
 
+impl<T> Default for Collator<T> {
+    fn default() -> Self {
+        Self {
+            phantom: PhantomData,
+        }
+    }
+}
+
 impl<T> Clone for Collator<T> {
     fn clone(&self) -> Self {
-        Self { phantom: PhantomData }
+        Self {
+            phantom: PhantomData,
+        }
     }
 }
 
@@ -99,22 +108,22 @@ impl Overlap {
                 Self::Narrow | Self::Equal => self,
                 Self::Wide => Self::Wide,
                 Self::Greater | Self::WideGreater => Self::WideGreater,
-            }
+            },
             Self::Equal => match other {
                 Self::Less | Self::WideLess => Self::WideLess,
                 Self::Equal | Self::Narrow | Self::Wide => other,
                 Self::Greater | Self::WideGreater => Self::WideGreater,
-            }
+            },
             Self::Less | Self::WideLess => match other {
                 Self::Less => self,
                 Self::WideLess | Self::Narrow | Self::Equal => Self::WideLess,
                 Self::Wide | Self::WideGreater | Self::Greater => Self::Wide,
-            }
+            },
             Self::Greater | Self::WideGreater => match other {
                 Self::Greater => self,
                 Self::WideGreater | Self::Narrow | Self::Equal => Self::WideGreater,
                 Self::Wide | Self::WideLess | Self::Less => Self::Wide,
-            }
+            },
         }
     }
 }
