@@ -12,8 +12,11 @@ use std::ops::{
     Bound, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
 
-#[cfg(feature = "complex")]
-pub use complex::*;
+#[cfg(feature = "stream")]
+pub use stream::*;
+
+#[cfg(feature = "stream")]
+mod stream;
 
 /// A collator for type `Value`.
 pub trait Collate: Sized + Eq {
