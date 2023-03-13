@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::mem;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -7,6 +6,8 @@ use futures::stream::{Fuse, Stream, StreamExt, TryStream};
 use pin_project::pin_project;
 
 use crate::Collate;
+
+use super::{try_poll_inner, swap_value};
 
 /// The stream type returned by [`diff`].
 /// The implementation of this stream is based on
@@ -22,41 +23,6 @@ pub struct Diff<C, T, L, R> {
 
     pending_left: Option<T>,
     pending_right: Option<T>,
-}
-
-impl<C, E, L, R> Diff<C, C::Value, L, R>
-where
-    C: Collate,
-    E: std::error::Error,
-    Fuse<L>: TryStream<Ok = C::Value, Error = E>,
-    Fuse<R>: TryStream<Ok = C::Value, Error = E>,
-{
-    fn poll_inner<S>(
-        stream: Pin<&mut Fuse<S>>,
-        pending: &mut Option<C::Value>,
-        cxt: &mut Context,
-    ) -> Result<bool, E>
-    where
-        Fuse<S>: TryStream<Ok = C::Value, Error = E>,
-    {
-        match stream.try_poll_next(cxt) {
-            Poll::Pending => Ok(false),
-            Poll::Ready(Some(Ok(value))) => {
-                *pending = Some(value);
-                Ok(false)
-            }
-            Poll::Ready(Some(Err(cause))) => Err(cause),
-            Poll::Ready(None) => Ok(true),
-        }
-    }
-
-    fn swap_value(pending: &mut Option<C::Value>) -> C::Value {
-        debug_assert!(pending.is_some());
-
-        let mut value: Option<C::Value> = None;
-        mem::swap(pending, &mut value);
-        value.unwrap()
-    }
 }
 
 impl<C, E, L, R> Stream for Diff<C, C::Value, L, R>
@@ -75,7 +41,7 @@ where
             let left_done = if this.left.is_done() {
                 true
             } else if this.pending_left.is_none() {
-                match Self::poll_inner(Pin::new(&mut this.left), this.pending_left, cxt) {
+                match try_poll_inner(Pin::new(&mut this.left), this.pending_left, cxt) {
                     Ok(done) => done,
                     Err(cause) => break Some(Err(cause)),
                 }
@@ -86,7 +52,7 @@ where
             let right_done = if this.right.is_done() {
                 true
             } else if this.pending_right.is_none() {
-                match Self::poll_inner(Pin::new(&mut this.right), this.pending_right, cxt) {
+                match try_poll_inner(Pin::new(&mut this.right), this.pending_right, cxt) {
                     Ok(done) => done,
                     Err(cause) => break Some(Err(cause)),
                 }
@@ -101,21 +67,21 @@ where
                 match this.collator.cmp(l_value, r_value) {
                     Ordering::Equal => {
                         // this value is present in the right stream, so drop it
-                        Self::swap_value(this.pending_left);
-                        Self::swap_value(this.pending_right);
+                        swap_value(this.pending_left);
+                        swap_value(this.pending_right);
                     }
                     Ordering::Less => {
                         // this value is not present in the right stream, so return it
-                        let l_value = Self::swap_value(this.pending_left);
+                        let l_value = swap_value(this.pending_left);
                         break Some(Ok(l_value));
                     }
                     Ordering::Greater => {
                         // this value could be present in the right stream--wait and see
-                        Self::swap_value(this.pending_right);
+                        swap_value(this.pending_right);
                     }
                 }
             } else if right_done && this.pending_left.is_some() {
-                let l_value = Self::swap_value(this.pending_left);
+                let l_value = swap_value(this.pending_left);
                 break Some(Ok(l_value));
             } else if left_done {
                 break None;

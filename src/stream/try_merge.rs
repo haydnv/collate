@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::mem;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -7,6 +6,8 @@ use futures::stream::{Fuse, Stream, StreamExt, TryStream};
 use pin_project::pin_project;
 
 use crate::Collate;
+
+use super::{try_poll_inner, swap_value};
 
 /// The stream returned by [`merge`].
 /// The implementation of this stream is based on
@@ -24,40 +25,6 @@ pub struct Merge<C, T, L, R> {
     pending_right: Option<T>,
 }
 
-impl<C, E, L, R> Merge<C, C::Value, L, R>
-where
-    C: Collate,
-    Fuse<L>: TryStream<Ok = C::Value, Error = E>,
-    Fuse<R>: TryStream<Ok = C::Value, Error = E>,
-{
-    fn poll_inner<S>(
-        stream: Pin<&mut Fuse<S>>,
-        pending: &mut Option<C::Value>,
-        cxt: &mut Context,
-    ) -> Result<bool, E>
-    where
-        Fuse<S>: TryStream<Ok = C::Value, Error = E>,
-    {
-        match stream.try_poll_next(cxt) {
-            Poll::Pending => Ok(false),
-            Poll::Ready(Some(Ok(value))) => {
-                *pending = Some(value);
-                Ok(false)
-            }
-            Poll::Ready(Some(Err(cause))) => Err(cause),
-            Poll::Ready(None) => Ok(true),
-        }
-    }
-
-    fn swap_value(pending: &mut Option<C::Value>) -> C::Value {
-        debug_assert!(pending.is_some());
-
-        let mut value: Option<C::Value> = None;
-        mem::swap(pending, &mut value);
-        value.unwrap()
-    }
-}
-
 impl<C, E, L, R> Stream for Merge<C, C::Value, L, R>
 where
     C: Collate,
@@ -72,7 +39,7 @@ where
         let left_done = if this.left.is_done() {
             true
         } else if this.pending_left.is_none() {
-            match Self::poll_inner(this.left, this.pending_left, cxt) {
+            match try_poll_inner(this.left, this.pending_left, cxt) {
                 Err(cause) => return Poll::Ready(Some(Err(cause))),
                 Ok(done) => done,
             }
@@ -83,7 +50,7 @@ where
         let right_done = if this.right.is_done() {
             true
         } else if this.pending_right.is_none() {
-            match Self::poll_inner(this.right, this.pending_right, cxt) {
+            match try_poll_inner(this.right, this.pending_right, cxt) {
                 Err(cause) => return Poll::Ready(Some(Err(cause))),
                 Ok(done) => done,
             }
@@ -97,24 +64,24 @@ where
 
             match this.collator.cmp(l_value, r_value) {
                 Ordering::Equal => {
-                    let l_value = Self::swap_value(this.pending_left);
-                    let _r_value = Self::swap_value(this.pending_right);
+                    let l_value = swap_value(this.pending_left);
+                    let _r_value = swap_value(this.pending_right);
                     Poll::Ready(Some(Ok(l_value)))
                 }
                 Ordering::Less => {
-                    let l_value = Self::swap_value(this.pending_left);
+                    let l_value = swap_value(this.pending_left);
                     Poll::Ready(Some(Ok(l_value)))
                 }
                 Ordering::Greater => {
-                    let r_value = Self::swap_value(this.pending_right);
+                    let r_value = swap_value(this.pending_right);
                     Poll::Ready(Some(Ok(r_value)))
                 }
             }
         } else if right_done && this.pending_left.is_some() {
-            let l_value = Self::swap_value(this.pending_left);
+            let l_value = swap_value(this.pending_left);
             Poll::Ready(Some(Ok(l_value)))
         } else if left_done && this.pending_right.is_some() {
-            let r_value = Self::swap_value(this.pending_right);
+            let r_value = swap_value(this.pending_right);
             Poll::Ready(Some(Ok(r_value)))
         } else if left_done && right_done {
             Poll::Ready(None)
