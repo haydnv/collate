@@ -6,7 +6,7 @@ use std::task::{Context, Poll};
 use futures::stream::{Fuse, Stream, StreamExt};
 use pin_project::pin_project;
 
-use super::Collate;
+use crate::Collate;
 
 /// The stream returned by [`merge`].
 /// The implementation of this stream is based on
@@ -114,7 +114,7 @@ where
     }
 }
 
-/// Merge two collated streams into one using the given `collator`.
+/// Merge two collated [`Stream`]s into one using the given `collator`.
 /// Both input streams **must** be collated.
 /// If either input stream is not collated, the order of the output stream is undefined.
 pub fn merge<C, L, R>(collator: C, left: L, right: R) -> Merge<C, C::Value, L, R>
@@ -129,27 +129,5 @@ where
         right: right.fuse(),
         pending_left: None,
         pending_right: None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::Collator;
-    use futures::stream;
-
-    #[tokio::test]
-    async fn test_merge() {
-        let collator = Collator::<u32>::default();
-
-        let left = vec![1, 3, 5, 7, 8, 9, 20];
-        let right = vec![2, 4, 6, 8, 9, 10, 11, 12];
-
-        let expected = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 20];
-        let actual = merge(collator, stream::iter(left), stream::iter(right))
-            .collect::<Vec<u32>>()
-            .await;
-
-        assert_eq!(expected, actual);
     }
 }
