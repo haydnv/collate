@@ -13,8 +13,7 @@
 use std::cmp::Ordering;
 use std::marker::PhantomData;
 use std::ops::{
-    Bound, Deref, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo,
-    RangeToInclusive,
+    Bound, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
 use std::sync::Arc;
 
@@ -176,13 +175,12 @@ pub trait OverlapsRange<T, C: Collate> {
     fn overlaps(&self, other: &T, collator: &C) -> Overlap;
 }
 
-impl<R, O, C> OverlapsRange<O, C> for Arc<R>
+impl<R, C> OverlapsRange<Self, C> for Arc<R>
 where
     R: OverlapsRange<R, C>,
-    O: Deref<Target = R>,
     C: Collate,
 {
-    fn overlaps(&self, other: &O, collator: &C) -> Overlap {
+    fn overlaps(&self, other: &Self, collator: &C) -> Overlap {
         R::overlaps(&*self, &*other, collator)
     }
 }
@@ -320,13 +318,12 @@ pub trait OverlapsValue<V, C: Collate> {
     fn overlaps_value(&self, value: &V, collator: &C) -> Overlap;
 }
 
-impl<V, O, C> OverlapsValue<O, C> for Arc<V>
+impl<V, C> OverlapsValue<Self, C> for Arc<V>
 where
     V: OverlapsValue<V, C>,
-    O: Deref<Target = V>,
     C: Collate,
 {
-    fn overlaps_value(&self, other: &O, collator: &C) -> Overlap {
+    fn overlaps_value(&self, other: &Self, collator: &C) -> Overlap {
         V::overlaps_value(&*self, &*other, collator)
     }
 }
