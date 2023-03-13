@@ -13,7 +13,7 @@ use super::{try_poll_inner, swap_value};
 /// The implementation of this stream is based on
 /// [`stream::select`](https://github.com/rust-lang/futures-rs/blob/master/futures-util/src/stream/select.rs).
 #[pin_project]
-pub struct Diff<C, T, L, R> {
+pub struct TryDiff<C, T, L, R> {
     collator: C,
 
     #[pin]
@@ -25,7 +25,7 @@ pub struct Diff<C, T, L, R> {
     pending_right: Option<T>,
 }
 
-impl<C, E, L, R> Stream for Diff<C, C::Value, L, R>
+impl<C, E, L, R> Stream for TryDiff<C, C::Value, L, R>
 where
     C: Collate,
     E: std::error::Error,
@@ -94,14 +94,14 @@ where
 /// i.e. return the items in `left` that are not in `right`.
 /// Both input streams **must** be collated.
 /// If either input stream is not collated, the behavior of the output stream is undefined.
-pub fn try_diff<C, E, L, R>(collator: C, left: L, right: R) -> Diff<C, C::Value, L, R>
+pub fn try_diff<C, E, L, R>(collator: C, left: L, right: R) -> TryDiff<C, C::Value, L, R>
 where
     C: Collate,
     E: std::error::Error,
     L: TryStream<Ok = C::Value, Error = E>,
     R: TryStream<Ok = C::Value, Error = E>,
 {
-    Diff {
+    TryDiff {
         collator,
         left: left.fuse(),
         right: right.fuse(),

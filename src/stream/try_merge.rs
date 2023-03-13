@@ -13,7 +13,7 @@ use super::{try_poll_inner, swap_value};
 /// The implementation of this stream is based on
 /// [`stream::select`](https://github.com/rust-lang/futures-rs/blob/master/futures-util/src/stream/select.rs).
 #[pin_project]
-pub struct Merge<C, T, L, R> {
+pub struct TryMerge<C, T, L, R> {
     collator: C,
 
     #[pin]
@@ -25,7 +25,7 @@ pub struct Merge<C, T, L, R> {
     pending_right: Option<T>,
 }
 
-impl<C, E, L, R> Stream for Merge<C, C::Value, L, R>
+impl<C, E, L, R> Stream for TryMerge<C, C::Value, L, R>
 where
     C: Collate,
     Fuse<L>: TryStream<Ok = C::Value, Error = E> + Unpin,
@@ -94,14 +94,14 @@ where
 /// Merge two collated [`TryStream`]s into one using the given `collator`.
 /// Both input streams **must** be collated and have the same error type.
 /// If either input stream is not collated, the order of the output stream is undefined.
-pub fn try_merge<C, E, L, R>(collator: C, left: L, right: R) -> Merge<C, C::Value, L, R>
+pub fn try_merge<C, E, L, R>(collator: C, left: L, right: R) -> TryMerge<C, C::Value, L, R>
 where
     C: Collate,
     E: std::error::Error,
     L: TryStream<Ok = C::Value, Error = E>,
     R: TryStream<Ok = C::Value, Error = E>,
 {
-    Merge {
+    TryMerge {
         collator,
         left: left.fuse(),
         right: right.fuse(),

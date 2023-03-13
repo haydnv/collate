@@ -5,6 +5,10 @@
 //! more efficient than calling `Ord::cmp` repeatedly, for example when collating localized strings
 //! using `rust_icu_ucol`. It's also useful to handle types like complex numbers which do not
 //! necessarily have a natural ordering.
+//!
+//! Use the "stream" feature flag to enable `diff` and `try_diff` functions to compute the
+//! difference between two collated `Stream`s, and the `merge` and `try_merge` functions
+//! to merge two collated `Stream`s.
 
 use std::cmp::Ordering;
 use std::marker::PhantomData;
@@ -133,7 +137,7 @@ impl Overlap {
 
 /// Range-range comparison methods
 pub trait OverlapsRange<T, C: Collate> {
-    /// Check whether `other` lies entirely within `self`.
+    /// Check whether `other` lies entirely within `self` according to the given `collator`.
     #[inline]
     fn contains(&self, other: &T, collator: &C) -> bool {
         match self.overlaps(other, collator) {
@@ -142,7 +146,7 @@ pub trait OverlapsRange<T, C: Collate> {
         }
     }
 
-    /// Check whether `other` lies at least partially within `self`.
+    /// Check whether `other` lies partially within `self` according to the given `collator`.
     #[inline]
     fn contains_partial(&self, other: &T, collator: &C) -> bool {
         match self.overlaps(other, collator) {
@@ -152,7 +156,7 @@ pub trait OverlapsRange<T, C: Collate> {
         }
     }
 
-    /// Check whether `self` overlaps `other`.
+    /// Check whether `self` overlaps `other` according to the given `collator`.
     ///
     /// Examples:
     /// ```
@@ -291,6 +295,7 @@ overlaps_range!(
 
 /// Range-value comparison methods
 pub trait OverlapsValue<V, C: Collate> {
+    /// Return `true` if this range contains `value` according to `collator`.
     fn contains_value(&self, value: &V, collator: &C) -> bool {
         match self.overlaps_value(value, collator) {
             Overlap::Less | Overlap::Greater => false,
@@ -298,6 +303,7 @@ pub trait OverlapsValue<V, C: Collate> {
         }
     }
 
+    /// Return `true` if this range overlaps `value` according to `collator`.
     fn overlaps_value(&self, value: &V, collator: &C) -> Overlap;
 }
 
