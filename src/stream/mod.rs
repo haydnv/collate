@@ -33,8 +33,8 @@ fn try_poll_inner<S>(
     pending: &mut Option<<Fuse<S> as TryStream>::Ok>,
     cxt: &mut Context,
 ) -> Result<bool, <Fuse<S> as TryStream>::Error>
-    where
-        Fuse<S>: TryStream,
+where
+    Fuse<S>: TryStream,
 {
     match stream.try_poll_next(cxt) {
         Poll::Pending => Ok(false),

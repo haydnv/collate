@@ -7,7 +7,7 @@ use pin_project::pin_project;
 
 use crate::Collate;
 
-use super::{try_poll_inner, swap_value};
+use super::{swap_value, try_poll_inner};
 
 /// The stream returned by [`merge`].
 /// The implementation of this stream is based on
