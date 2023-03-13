@@ -3,7 +3,7 @@ use std::mem;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use futures::stream::{Fuse, Stream, StreamExt};
+use futures::stream::{Fuse, Stream, StreamExt, TryStream};
 use pin_project::pin_project;
 
 use crate::Collate;
@@ -24,24 +24,29 @@ pub struct Diff<C, T, L, R> {
     pending_right: Option<T>,
 }
 
-impl<C, L, R> Diff<C, C::Value, L, R>
+impl<C, E, L, R> Diff<C, C::Value, L, R>
 where
     C: Collate,
-    L: Stream<Item = C::Value>,
-    R: Stream<Item = C::Value>,
+    E: std::error::Error,
+    Fuse<L>: TryStream<Ok = C::Value, Error = E>,
+    Fuse<R>: TryStream<Ok = C::Value, Error = E>,
 {
-    fn poll_inner<S: Stream<Item = C::Value>>(
+    fn poll_inner<S>(
         stream: Pin<&mut Fuse<S>>,
         pending: &mut Option<C::Value>,
         cxt: &mut Context,
-    ) -> bool {
-        match stream.poll_next(cxt) {
-            Poll::Pending => false,
-            Poll::Ready(Some(value)) => {
+    ) -> Result<bool, E>
+    where
+        Fuse<S>: TryStream<Ok = C::Value, Error = E>,
+    {
+        match stream.try_poll_next(cxt) {
+            Poll::Pending => Ok(false),
+            Poll::Ready(Some(Ok(value))) => {
                 *pending = Some(value);
-                false
+                Ok(false)
             }
-            Poll::Ready(None) => true,
+            Poll::Ready(Some(Err(cause))) => Err(cause),
+            Poll::Ready(None) => Ok(true),
         }
     }
 
@@ -54,13 +59,14 @@ where
     }
 }
 
-impl<C, L, R> Stream for Diff<C, C::Value, L, R>
+impl<C, E, L, R> Stream for Diff<C, C::Value, L, R>
 where
     C: Collate,
-    L: Stream<Item = C::Value> + Unpin,
-    R: Stream<Item = C::Value> + Unpin,
+    E: std::error::Error,
+    Fuse<L>: TryStream<Ok = C::Value, Error = E> + Unpin,
+    Fuse<R>: TryStream<Ok = C::Value, Error = E> + Unpin,
 {
-    type Item = C::Value;
+    type Item = Result<C::Value, E>;
 
     fn poll_next(self: Pin<&mut Self>, cxt: &mut Context) -> Poll<Option<Self::Item>> {
         let mut this = self.project();
@@ -69,7 +75,10 @@ where
             let left_done = if this.left.is_done() {
                 true
             } else if this.pending_left.is_none() {
-                Self::poll_inner(Pin::new(&mut this.left), this.pending_left, cxt)
+                match Self::poll_inner(Pin::new(&mut this.left), this.pending_left, cxt) {
+                    Ok(done) => done,
+                    Err(cause) => break Some(Err(cause)),
+                }
             } else {
                 false
             };
@@ -77,7 +86,10 @@ where
             let right_done = if this.right.is_done() {
                 true
             } else if this.pending_right.is_none() {
-                Self::poll_inner(Pin::new(&mut this.right), this.pending_right, cxt)
+                match Self::poll_inner(Pin::new(&mut this.right), this.pending_right, cxt) {
+                    Ok(done) => done,
+                    Err(cause) => break Some(Err(cause)),
+                }
             } else {
                 false
             };
@@ -95,7 +107,7 @@ where
                     Ordering::Less => {
                         // this value is not present in the right stream, so return it
                         let l_value = Self::swap_value(this.pending_left);
-                        break Some(l_value);
+                        break Some(Ok(l_value));
                     }
                     Ordering::Greater => {
                         // this value could be present in the right stream--wait and see
@@ -104,7 +116,7 @@ where
                 }
             } else if right_done && this.pending_left.is_some() {
                 let l_value = Self::swap_value(this.pending_left);
-                break Some(l_value);
+                break Some(Ok(l_value));
             } else if left_done {
                 break None;
             }
@@ -112,15 +124,16 @@ where
     }
 }
 
-/// Compute the difference of two collated [`Stream`]s,
+/// Compute the difference of two collated [`TryStream`]s,
 /// i.e. return the items in `left` that are not in `right`.
 /// Both input streams **must** be collated.
 /// If either input stream is not collated, the behavior of the output stream is undefined.
-pub fn diff<C, L, R>(collator: C, left: L, right: R) -> Diff<C, C::Value, L, R>
+pub fn try_diff<C, E, L, R>(collator: C, left: L, right: R) -> Diff<C, C::Value, L, R>
 where
     C: Collate,
-    L: Stream<Item = C::Value>,
-    R: Stream<Item = C::Value>,
+    E: std::error::Error,
+    L: TryStream<Ok = C::Value, Error = E>,
+    R: TryStream<Ok = C::Value, Error = E>,
 {
     Diff {
         collator,

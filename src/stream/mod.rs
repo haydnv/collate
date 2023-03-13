@@ -1,9 +1,11 @@
 pub use diff::*;
 pub use merge::*;
+pub use try_diff::*;
 pub use try_merge::*;
 
 mod diff;
 mod merge;
+mod try_diff;
 mod try_merge;
 
 #[cfg(test)]
@@ -12,6 +14,17 @@ mod tests {
     use crate::Collator;
     use futures::stream::{self, StreamExt, TryStreamExt};
     use std::fmt;
+
+    #[derive(Debug)]
+    struct Error(String);
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            self.0.fmt(f)
+        }
+    }
+
+    impl std::error::Error for Error {}
 
     #[tokio::test]
     async fn test_diff() {
@@ -24,6 +37,29 @@ mod tests {
         let actual = diff(collator, stream::iter(left), stream::iter(right))
             .collect::<Vec<u32>>()
             .await;
+
+        assert_eq!(expected, actual);
+    }
+
+    #[tokio::test]
+    async fn test_try_diff() {
+        let collator = Collator::<u32>::default();
+
+        let left = vec![1, 3, 5, 7, 8, 9, 20];
+        let right = vec![2, 4, 5, 6, 8, 9];
+
+        let expected = vec![1, 3, 7, 20];
+        let mut actual = Vec::with_capacity(expected.len());
+
+        let mut stream = try_diff(
+            collator,
+            stream::iter(left).map(Result::<u32, Error>::Ok),
+            stream::iter(right).map(Result::<u32, Error>::Ok),
+        );
+
+        while let Some(n) = stream.try_next().await.expect("n") {
+            actual.push(n);
+        }
 
         assert_eq!(expected, actual);
     }
@@ -45,17 +81,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_merge() {
-        #[derive(Debug)]
-        struct Error(String);
-
-        impl fmt::Display for Error {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                self.0.fmt(f)
-            }
-        }
-
-        impl std::error::Error for Error {}
-
         let collator = Collator::<u32>::default();
 
         let left = vec![1, 3, 5, 7, 8, 9, 20];
