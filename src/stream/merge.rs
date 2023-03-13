@@ -8,7 +8,7 @@ use pin_project::pin_project;
 
 use crate::Collate;
 
-/// The stream returned by [`merge`].
+/// The stream type returned by [`merge`].
 /// The implementation of this stream is based on
 /// [`stream::select`](https://github.com/rust-lang/futures-rs/blob/master/futures-util/src/stream/select.rs).
 #[pin_project]

@@ -1,6 +1,8 @@
+pub use diff::*;
 pub use merge::*;
 pub use try_merge::*;
 
+mod diff;
 mod merge;
 mod try_merge;
 
@@ -10,6 +12,21 @@ mod tests {
     use crate::Collator;
     use futures::stream::{self, StreamExt, TryStreamExt};
     use std::fmt;
+
+    #[tokio::test]
+    async fn test_diff() {
+        let collator = Collator::<u32>::default();
+
+        let left = vec![1, 3, 5, 7, 8, 9, 20];
+        let right = vec![2, 4, 5, 6, 8, 9];
+
+        let expected = vec![1, 3, 7, 20];
+        let actual = diff(collator, stream::iter(left), stream::iter(right))
+            .collect::<Vec<u32>>()
+            .await;
+
+        assert_eq!(expected, actual);
+    }
 
     #[tokio::test]
     async fn test_merge() {
