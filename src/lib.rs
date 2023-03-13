@@ -13,7 +13,8 @@
 use std::cmp::Ordering;
 use std::marker::PhantomData;
 use std::ops::{
-    Bound, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
+    Bound, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo,
+    RangeToInclusive,
 };
 use std::sync::Arc;
 
@@ -185,6 +186,16 @@ where
     }
 }
 
+impl<R, C> OverlapsRange<R, C> for Arc<R>
+where
+    R: OverlapsRange<R, C>,
+    C: Collate,
+{
+    fn overlaps(&self, other: &R, collator: &C) -> Overlap {
+        R::overlaps(&*self, other, collator)
+    }
+}
+
 type BorrowBounds<'a, V> = (&'a Bound<V>, &'a Bound<V>);
 
 impl<'a, C> OverlapsRange<BorrowBounds<'a, C::Value>, C> for BorrowBounds<'a, C::Value>
@@ -324,6 +335,16 @@ where
     C: Collate,
 {
     fn overlaps_value(&self, other: &Self, collator: &C) -> Overlap {
+        V::overlaps_value(&*self, &*other, collator)
+    }
+}
+
+impl<V, C> OverlapsValue<V, C> for Arc<V>
+where
+    V: OverlapsValue<V, C>,
+    C: Collate,
+{
+    fn overlaps_value(&self, other: &V, collator: &C) -> Overlap {
         V::overlaps_value(&*self, &*other, collator)
     }
 }
