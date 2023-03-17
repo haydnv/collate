@@ -32,17 +32,11 @@ where
     type Item = Result<C::Value, E>;
 
     fn poll_next(self: Pin<&mut Self>, cxt: &mut Context) -> Poll<Option<Self::Item>> {
-        #[cfg(feature = "logging")]
-        log::debug!("TryMerge::poll_next");
-
         let this = self.project();
 
         let left_done = if this.left.is_done() {
             true
         } else if this.pending_left.is_none() {
-            #[cfg(feature = "logging")]
-            log::debug!("TryMerge::poll_next left");
-
             match ready!(this.left.try_poll_next(cxt)) {
                 Some(Ok(value)) => {
                     *this.pending_left = Some(value);
@@ -58,9 +52,6 @@ where
         let right_done = if this.right.is_done() {
             true
         } else if this.pending_right.is_none() {
-            #[cfg(feature = "logging")]
-            log::debug!("TryMerge::poll_next right");
-
             match ready!(this.right.try_poll_next(cxt)) {
                 Some(Ok(value)) => {
                     *this.pending_right = Some(value);
