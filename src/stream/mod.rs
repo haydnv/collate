@@ -8,14 +8,6 @@ mod merge;
 mod try_diff;
 mod try_merge;
 
-fn swap_value<V>(pending: &mut Option<V>) -> V {
-    debug_assert!(pending.is_some());
-
-    let mut value: Option<V> = None;
-    std::mem::swap(pending, &mut value);
-    value.unwrap()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -7,8 +7,6 @@ use pin_project::pin_project;
 
 use crate::Collate;
 
-use super::swap_value;
-
 /// The stream returned by [`merge`].
 /// The implementation of this stream is based on
 /// [`stream::select`](https://github.com/rust-lang/futures-rs/blob/master/futures-util/src/stream/select.rs).
@@ -75,36 +73,29 @@ where
             false
         };
 
-        if this.pending_left.is_some() && this.pending_right.is_some() {
+        let value = if this.pending_left.is_some() && this.pending_right.is_some() {
             let l_value = this.pending_left.as_ref().unwrap();
             let r_value = this.pending_right.as_ref().unwrap();
 
             match this.collator.cmp(l_value, r_value) {
                 Ordering::Equal => {
-                    let l_value = swap_value(this.pending_left);
-                    let _r_value = swap_value(this.pending_right);
-                    Poll::Ready(Some(Ok(l_value)))
+                    this.pending_right.take();
+                    this.pending_left.take()
                 }
-                Ordering::Less => {
-                    let l_value = swap_value(this.pending_left);
-                    Poll::Ready(Some(Ok(l_value)))
-                }
-                Ordering::Greater => {
-                    let r_value = swap_value(this.pending_right);
-                    Poll::Ready(Some(Ok(r_value)))
-                }
+                Ordering::Less => this.pending_left.take(),
+                Ordering::Greater => this.pending_right.take(),
             }
         } else if right_done && this.pending_left.is_some() {
-            let l_value = swap_value(this.pending_left);
-            Poll::Ready(Some(Ok(l_value)))
+            this.pending_left.take()
         } else if left_done && this.pending_right.is_some() {
-            let r_value = swap_value(this.pending_right);
-            Poll::Ready(Some(Ok(r_value)))
+            this.pending_right.take()
         } else if left_done && right_done {
-            Poll::Ready(None)
+            None
         } else {
-            Poll::Pending
-        }
+            unreachable!("both streams to merge are still pending")
+        };
+
+        Poll::Ready(value.map(Ok))
     }
 }
 

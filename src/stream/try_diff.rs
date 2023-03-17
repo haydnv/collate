@@ -7,8 +7,6 @@ use pin_project::pin_project;
 
 use crate::Collate;
 
-use super::swap_value;
-
 /// The stream type returned by [`diff`].
 /// The implementation of this stream is based on
 /// [`stream::select`](https://github.com/rust-lang/futures-rs/blob/master/futures-util/src/stream/select.rs).
@@ -84,22 +82,20 @@ where
                 match this.collator.cmp(l_value, r_value) {
                     Ordering::Equal => {
                         // this value is present in the right stream, so drop it
-                        swap_value(this.pending_left);
-                        swap_value(this.pending_right);
+                        this.pending_left.take();
+                        this.pending_right.take();
                     }
                     Ordering::Less => {
                         // this value is not present in the right stream, so return it
-                        let l_value = swap_value(this.pending_left);
-                        break Some(Ok(l_value));
+                        break this.pending_left.take().map(Ok);
                     }
                     Ordering::Greater => {
                         // this value could be present in the right stream--wait and see
-                        swap_value(this.pending_right);
+                        this.pending_right.take();
                     }
                 }
             } else if right_done && this.pending_left.is_some() {
-                let l_value = swap_value(this.pending_left);
-                break Some(Ok(l_value));
+                break this.pending_left.take().map(Ok);
             } else if left_done {
                 break None;
             }
