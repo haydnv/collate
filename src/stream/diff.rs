@@ -1,13 +1,13 @@
 use std::cmp::Ordering;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 use futures::stream::{Fuse, Stream, StreamExt};
 use pin_project::pin_project;
 
 use crate::Collate;
 
-use super::{poll_inner, swap_value};
+use super::swap_value;
 
 /// The stream type returned by [`diff`].
 /// The implementation of this stream is based on
@@ -40,7 +40,13 @@ where
             let left_done = if this.left.is_done() {
                 true
             } else if this.pending_left.is_none() {
-                poll_inner(Pin::new(&mut this.left), this.pending_left, cxt)
+                match ready!(Pin::new(&mut this.left).poll_next(cxt)) {
+                    Some(value) => {
+                        *this.pending_left = Some(value);
+                        false
+                    }
+                    None => true,
+                }
             } else {
                 false
             };
@@ -48,7 +54,13 @@ where
             let right_done = if this.right.is_done() {
                 true
             } else if this.pending_right.is_none() {
-                poll_inner(Pin::new(&mut this.right), this.pending_right, cxt)
+                match ready!(Pin::new(&mut this.right).poll_next(cxt)) {
+                    Some(value) => {
+                        *this.pending_right = Some(value);
+                        false
+                    }
+                    None => true,
+                }
             } else {
                 false
             };

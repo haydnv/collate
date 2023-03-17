@@ -1,13 +1,13 @@
 use std::cmp::Ordering;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 use futures::stream::{Fuse, Stream, StreamExt, TryStream};
 use pin_project::pin_project;
 
 use crate::Collate;
 
-use super::{swap_value, try_poll_inner};
+use super::swap_value;
 
 /// The stream returned by [`merge`].
 /// The implementation of this stream is based on
@@ -34,14 +34,24 @@ where
     type Item = Result<C::Value, E>;
 
     fn poll_next(self: Pin<&mut Self>, cxt: &mut Context) -> Poll<Option<Self::Item>> {
+        #[cfg(feature = "logging")]
+        log::debug!("TryMerge::poll_next");
+
         let this = self.project();
 
         let left_done = if this.left.is_done() {
             true
         } else if this.pending_left.is_none() {
-            match try_poll_inner(this.left, this.pending_left, cxt) {
-                Err(cause) => return Poll::Ready(Some(Err(cause))),
-                Ok(done) => done,
+            #[cfg(feature = "logging")]
+            log::debug!("TryMerge::poll_next left");
+
+            match ready!(this.left.try_poll_next(cxt)) {
+                Some(Ok(value)) => {
+                    *this.pending_left = Some(value);
+                    false
+                }
+                Some(Err(cause)) => return Poll::Ready(Some(Err(cause))),
+                None => true,
             }
         } else {
             false
@@ -50,9 +60,16 @@ where
         let right_done = if this.right.is_done() {
             true
         } else if this.pending_right.is_none() {
-            match try_poll_inner(this.right, this.pending_right, cxt) {
-                Err(cause) => return Poll::Ready(Some(Err(cause))),
-                Ok(done) => done,
+            #[cfg(feature = "logging")]
+            log::debug!("TryMerge::poll_next right");
+
+            match ready!(this.right.try_poll_next(cxt)) {
+                Some(Ok(value)) => {
+                    *this.pending_right = Some(value);
+                    false
+                }
+                Some(Err(cause)) => return Poll::Ready(Some(Err(cause))),
+                None => true,
             }
         } else {
             false

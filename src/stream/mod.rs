@@ -1,8 +1,3 @@
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
-use futures::stream::{Fuse, Stream, TryStream};
-
 pub use diff::*;
 pub use merge::*;
 pub use try_diff::*;
@@ -12,40 +7,6 @@ mod diff;
 mod merge;
 mod try_diff;
 mod try_merge;
-
-fn poll_inner<S: Stream>(
-    stream: Pin<&mut Fuse<S>>,
-    pending: &mut Option<S::Item>,
-    cxt: &mut Context,
-) -> bool {
-    match stream.poll_next(cxt) {
-        Poll::Pending => false,
-        Poll::Ready(Some(value)) => {
-            *pending = Some(value);
-            false
-        }
-        Poll::Ready(None) => true,
-    }
-}
-
-fn try_poll_inner<S>(
-    stream: Pin<&mut Fuse<S>>,
-    pending: &mut Option<<Fuse<S> as TryStream>::Ok>,
-    cxt: &mut Context,
-) -> Result<bool, <Fuse<S> as TryStream>::Error>
-where
-    Fuse<S>: TryStream,
-{
-    match stream.try_poll_next(cxt) {
-        Poll::Pending => Ok(false),
-        Poll::Ready(Some(Ok(value))) => {
-            *pending = Some(value);
-            Ok(false)
-        }
-        Poll::Ready(Some(Err(cause))) => Err(cause),
-        Poll::Ready(None) => Ok(true),
-    }
-}
 
 fn swap_value<V>(pending: &mut Option<V>) -> V {
     debug_assert!(pending.is_some());

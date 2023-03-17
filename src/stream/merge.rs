@@ -1,13 +1,13 @@
 use std::cmp::Ordering;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 use futures::stream::{Fuse, Stream, StreamExt};
 use pin_project::pin_project;
 
 use crate::Collate;
 
-use super::{poll_inner, swap_value};
+use super::swap_value;
 
 /// The stream type returned by [`merge`].
 /// The implementation of this stream is based on
@@ -34,12 +34,24 @@ where
     type Item = C::Value;
 
     fn poll_next(self: Pin<&mut Self>, cxt: &mut Context) -> Poll<Option<Self::Item>> {
+        #[cfg(feature = "logging")]
+        log::debug!("Merge::poll_next");
+
         let this = self.project();
 
         let left_done = if this.left.is_done() {
             true
         } else if this.pending_left.is_none() {
-            poll_inner(this.left, this.pending_left, cxt)
+            #[cfg(feature = "logging")]
+            log::debug!("Merge::poll_next left");
+
+            match ready!(this.left.poll_next(cxt)) {
+                Some(value) => {
+                    *this.pending_left = Some(value);
+                    false
+                }
+                None => true,
+            }
         } else {
             false
         };
@@ -47,12 +59,21 @@ where
         let right_done = if this.right.is_done() {
             true
         } else if this.pending_right.is_none() {
-            poll_inner(this.right, this.pending_right, cxt)
+            #[cfg(feature = "logging")]
+            log::debug!("Merge::poll_next right");
+
+            match ready!(this.right.poll_next(cxt)) {
+                Some(value) => {
+                    *this.pending_right = Some(value);
+                    false
+                }
+                None => true,
+            }
         } else {
             false
         };
 
-        if this.pending_left.is_some() && this.pending_right.is_some() {
+        let value = if this.pending_left.is_some() && this.pending_right.is_some() {
             let l_value = this.pending_left.as_ref().unwrap();
             let r_value = this.pending_right.as_ref().unwrap();
 
@@ -60,28 +81,30 @@ where
                 Ordering::Equal => {
                     let l_value = swap_value(this.pending_left);
                     let _r_value = swap_value(this.pending_right);
-                    Poll::Ready(Some(l_value))
+                    Some(l_value)
                 }
                 Ordering::Less => {
                     let l_value = swap_value(this.pending_left);
-                    Poll::Ready(Some(l_value))
+                    Some(l_value)
                 }
                 Ordering::Greater => {
                     let r_value = swap_value(this.pending_right);
-                    Poll::Ready(Some(r_value))
+                    Some(r_value)
                 }
             }
         } else if right_done && this.pending_left.is_some() {
             let l_value = swap_value(this.pending_left);
-            Poll::Ready(Some(l_value))
+            Some(l_value)
         } else if left_done && this.pending_right.is_some() {
             let r_value = swap_value(this.pending_right);
-            Poll::Ready(Some(r_value))
+            Some(r_value)
         } else if left_done && right_done {
-            Poll::Ready(None)
+            None
         } else {
-            Poll::Pending
-        }
+            unreachable!("both streams to merge are still pending")
+        };
+
+        Poll::Ready(value)
     }
 }
 

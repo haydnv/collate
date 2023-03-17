@@ -13,8 +13,7 @@
 use std::cmp::Ordering;
 use std::marker::PhantomData;
 use std::ops::{
-    Bound, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo,
-    RangeToInclusive,
+    Bound, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
 use std::sync::Arc;
 

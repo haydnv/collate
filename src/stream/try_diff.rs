@@ -1,13 +1,13 @@
 use std::cmp::Ordering;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 use futures::stream::{Fuse, Stream, StreamExt, TryStream};
 use pin_project::pin_project;
 
 use crate::Collate;
 
-use super::{swap_value, try_poll_inner};
+use super::swap_value;
 
 /// The stream type returned by [`diff`].
 /// The implementation of this stream is based on
@@ -35,15 +35,25 @@ where
     type Item = Result<C::Value, E>;
 
     fn poll_next(self: Pin<&mut Self>, cxt: &mut Context) -> Poll<Option<Self::Item>> {
+        #[cfg(feature = "logging")]
+        log::debug!("TryDiff::poll_next");
+
         let mut this = self.project();
 
         Poll::Ready(loop {
             let left_done = if this.left.is_done() {
                 true
             } else if this.pending_left.is_none() {
-                match try_poll_inner(Pin::new(&mut this.left), this.pending_left, cxt) {
-                    Ok(done) => done,
-                    Err(cause) => break Some(Err(cause)),
+                #[cfg(feature = "logging")]
+                log::debug!("TryDiff::poll_next left");
+
+                match ready!(this.left.as_mut().try_poll_next(cxt)) {
+                    Some(Ok(value)) => {
+                        *this.pending_left = Some(value);
+                        false
+                    }
+                    Some(Err(cause)) => break Some(Err(cause)),
+                    None => true,
                 }
             } else {
                 false
@@ -52,9 +62,16 @@ where
             let right_done = if this.right.is_done() {
                 true
             } else if this.pending_right.is_none() {
-                match try_poll_inner(Pin::new(&mut this.right), this.pending_right, cxt) {
-                    Ok(done) => done,
-                    Err(cause) => break Some(Err(cause)),
+                #[cfg(feature = "logging")]
+                log::debug!("TryDiff::poll_next right");
+
+                match ready!(this.right.as_mut().try_poll_next(cxt)) {
+                    Some(Ok(value)) => {
+                        *this.pending_right = Some(value);
+                        false
+                    }
+                    Some(Err(cause)) => break Some(Err(cause)),
+                    None => true,
                 }
             } else {
                 false
