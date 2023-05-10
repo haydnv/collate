@@ -136,6 +136,16 @@ impl Overlap {
     }
 }
 
+impl From<Ordering> for Overlap {
+    fn from(order: Ordering) -> Self {
+        match order {
+            Ordering::Less => Self::Less,
+            Ordering::Equal => Self::Equal,
+            Ordering::Greater => Self::Greater,
+        }
+    }
+}
+
 /// Range-range comparison methods
 pub trait OverlapsRange<T, C: Collate> {
     /// Check whether `other` lies entirely within `self` according to the given `collator`.
