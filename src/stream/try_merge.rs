@@ -5,7 +5,7 @@ use std::task::{ready, Context, Poll};
 use futures::stream::{Fuse, Stream, StreamExt, TryStream};
 use pin_project::pin_project;
 
-use crate::Collate;
+use crate::CollateRef;
 
 /// The stream returned by [`merge`].
 /// The implementation of this stream is based on
@@ -23,13 +23,13 @@ pub struct TryMerge<C, T, L, R> {
     pending_right: Option<T>,
 }
 
-impl<C, E, L, R> Stream for TryMerge<C, C::Value, L, R>
+impl<C, T, E, L, R> Stream for TryMerge<C, T, L, R>
 where
-    C: Collate,
-    Fuse<L>: TryStream<Ok = C::Value, Error = E> + Unpin,
-    Fuse<R>: TryStream<Ok = C::Value, Error = E> + Unpin,
+    C: CollateRef<T>,
+    Fuse<L>: TryStream<Ok = T, Error = E> + Unpin,
+    Fuse<R>: TryStream<Ok = T, Error = E> + Unpin,
 {
-    type Item = Result<C::Value, E>;
+    type Item = Result<T, E>;
 
     fn poll_next(self: Pin<&mut Self>, cxt: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -68,7 +68,7 @@ where
             let l_value = this.pending_left.as_ref().unwrap();
             let r_value = this.pending_right.as_ref().unwrap();
 
-            match this.collator.cmp(l_value, r_value) {
+            match this.collator.cmp_ref(l_value, r_value) {
                 Ordering::Equal => {
                     this.pending_right.take();
                     this.pending_left.take()
@@ -93,12 +93,12 @@ where
 /// Merge two collated [`TryStream`]s into one using the given `collator`.
 /// Both input streams **must** be collated and have the same error type.
 /// If either input stream is not collated, the order of the output stream is undefined.
-pub fn try_merge<C, E, L, R>(collator: C, left: L, right: R) -> TryMerge<C, C::Value, L, R>
+pub fn try_merge<C, T, E, L, R>(collator: C, left: L, right: R) -> TryMerge<C, T, L, R>
 where
-    C: Collate,
+    C: CollateRef<T>,
     E: std::error::Error,
-    L: TryStream<Ok = C::Value, Error = E>,
-    R: TryStream<Ok = C::Value, Error = E>,
+    L: TryStream<Ok = T, Error = E>,
+    R: TryStream<Ok = T, Error = E>,
 {
     TryMerge {
         collator,

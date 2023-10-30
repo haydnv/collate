@@ -5,7 +5,7 @@ use std::task::{ready, Context, Poll};
 use futures::stream::{Fuse, Stream, StreamExt};
 use pin_project::pin_project;
 
-use crate::Collate;
+use crate::CollateRef;
 
 /// The stream type returned by [`merge`].
 /// The implementation of this stream is based on
@@ -23,13 +23,13 @@ pub struct Merge<C, T, L, R> {
     pending_right: Option<T>,
 }
 
-impl<C, L, R> Stream for Merge<C, C::Value, L, R>
+impl<C, T, L, R> Stream for Merge<C, T, L, R>
 where
-    C: Collate,
-    L: Stream<Item = C::Value> + Unpin,
-    R: Stream<Item = C::Value> + Unpin,
+    C: CollateRef<T>,
+    L: Stream<Item = T> + Unpin,
+    R: Stream<Item = T> + Unpin,
 {
-    type Item = C::Value;
+    type Item = T;
 
     fn poll_next(self: Pin<&mut Self>, cxt: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -66,7 +66,7 @@ where
             let l_value = this.pending_left.as_ref().unwrap();
             let r_value = this.pending_right.as_ref().unwrap();
 
-            match this.collator.cmp(l_value, r_value) {
+            match this.collator.cmp_ref(l_value, r_value) {
                 Ordering::Equal => {
                     this.pending_right.take();
                     this.pending_left.take()
@@ -91,11 +91,11 @@ where
 /// Merge two collated [`Stream`]s into one using the given `collator`.
 /// Both input streams **must** be collated.
 /// If either input stream is not collated, the order of the output stream is undefined.
-pub fn merge<C, L, R>(collator: C, left: L, right: R) -> Merge<C, C::Value, L, R>
+pub fn merge<C, T, L, R>(collator: C, left: L, right: R) -> Merge<C, T, L, R>
 where
-    C: Collate,
-    L: Stream<Item = C::Value>,
-    R: Stream<Item = C::Value>,
+    C: CollateRef<T>,
+    L: Stream<Item = T>,
+    R: Stream<Item = T>,
 {
     Merge {
         collator,
