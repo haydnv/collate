@@ -5,7 +5,7 @@ use std::task::{ready, Context, Poll};
 use futures::stream::{Fuse, Stream, StreamExt, TryStream};
 use pin_project::pin_project;
 
-use crate::Collate;
+use crate::CollateRef;
 
 /// The stream type returned by [`diff`].
 /// The implementation of this stream is based on
@@ -23,14 +23,14 @@ pub struct TryDiff<C, T, L, R> {
     pending_right: Option<T>,
 }
 
-impl<C, E, L, R> Stream for TryDiff<C, C::Value, L, R>
+impl<C, T, E, L, R> Stream for TryDiff<C, T, L, R>
 where
-    C: Collate,
+    C: CollateRef<T>,
     E: std::error::Error,
-    Fuse<L>: TryStream<Ok = C::Value, Error = E> + Unpin,
-    Fuse<R>: TryStream<Ok = C::Value, Error = E> + Unpin,
+    Fuse<L>: TryStream<Ok = T, Error = E> + Unpin,
+    Fuse<R>: TryStream<Ok = T, Error = E> + Unpin,
 {
-    type Item = Result<C::Value, E>;
+    type Item = Result<T, E>;
 
     fn poll_next(self: Pin<&mut Self>, cxt: &mut Context) -> Poll<Option<Self::Item>> {
         let mut this = self.project();
@@ -70,7 +70,7 @@ where
                 let l_value = this.pending_left.as_ref().unwrap();
                 let r_value = this.pending_right.as_ref().unwrap();
 
-                match this.collator.cmp(l_value, r_value) {
+                match this.collator.cmp_ref(l_value, r_value) {
                     Ordering::Equal => {
                         // this value is present in the right stream, so drop it
                         this.pending_left.take();
@@ -98,12 +98,12 @@ where
 /// i.e. return the items in `left` that are not in `right`.
 /// Both input streams **must** be collated.
 /// If either input stream is not collated, the behavior of the output stream is undefined.
-pub fn try_diff<C, E, L, R>(collator: C, left: L, right: R) -> TryDiff<C, C::Value, L, R>
+pub fn try_diff<C, T, E, L, R>(collator: C, left: L, right: R) -> TryDiff<C, T, L, R>
 where
-    C: Collate,
+    C: CollateRef<T>,
     E: std::error::Error,
-    L: TryStream<Ok = C::Value, Error = E>,
-    R: TryStream<Ok = C::Value, Error = E>,
+    L: TryStream<Ok = T, Error = E>,
+    R: TryStream<Ok = T, Error = E>,
 {
     TryDiff {
         collator,

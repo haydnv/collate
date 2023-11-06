@@ -5,7 +5,7 @@ use std::task::{ready, Context, Poll};
 use futures::stream::{Fuse, Stream, StreamExt};
 use pin_project::pin_project;
 
-use crate::Collate;
+use crate::CollateRef;
 
 /// The stream type returned by [`diff`].
 /// The implementation of this stream is based on
@@ -23,13 +23,13 @@ pub struct Diff<C, T, L, R> {
     pending_right: Option<T>,
 }
 
-impl<C, L, R> Stream for Diff<C, C::Value, L, R>
+impl<C, T, L, R> Stream for Diff<C, T, L, R>
 where
-    C: Collate,
-    L: Stream<Item = C::Value> + Unpin,
-    R: Stream<Item = C::Value> + Unpin,
+    C: CollateRef<T>,
+    L: Stream<Item = T> + Unpin,
+    R: Stream<Item = T> + Unpin,
 {
-    type Item = C::Value;
+    type Item = T;
 
     fn poll_next(self: Pin<&mut Self>, cxt: &mut Context) -> Poll<Option<Self::Item>> {
         let mut this = self.project();
@@ -67,7 +67,7 @@ where
                 let l_value = this.pending_left.as_ref().unwrap();
                 let r_value = this.pending_right.as_ref().unwrap();
 
-                match this.collator.cmp(l_value, r_value) {
+                match this.collator.cmp_ref(l_value, r_value) {
                     Ordering::Equal => {
                         // this value is present in the right stream, so drop it
                         this.pending_left.take();
@@ -95,11 +95,11 @@ where
 /// i.e. return the items in `left` that are not in `right`.
 /// Both input streams **must** be collated.
 /// If either input stream is not collated, the behavior of the output stream is undefined.
-pub fn diff<C, L, R>(collator: C, left: L, right: R) -> Diff<C, C::Value, L, R>
+pub fn diff<C, T, L, R>(collator: C, left: L, right: R) -> Diff<C, T, L, R>
 where
-    C: Collate,
-    L: Stream<Item = C::Value>,
-    R: Stream<Item = C::Value>,
+    C: CollateRef<T>,
+    L: Stream<Item = T>,
+    R: Stream<Item = T>,
 {
     Diff {
         collator,
