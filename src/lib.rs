@@ -315,7 +315,7 @@ overlaps_range!(
 );
 
 /// Range-value comparison methods
-pub trait OverlapsValue<T, C: CollateRef<T>> {
+pub trait OverlapsValue<T, C: Collate> {
     /// Return `true` if this range contains `value` according to `collator`.
     fn contains_value(&self, value: &T, collator: &C) -> bool {
         match self.overlaps_value(value, collator) {
